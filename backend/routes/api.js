@@ -12,7 +12,7 @@ import { authenticate } from '../authMiddleware.js';
 const router = express.Router();
 
 router.post('/login', (req, res) => {
-  const { password } = req.body;
+  const { password } = req.body || {};
   const adminPassword = (process.env.ADMIN_PASSWORD || 'admin123').trim();
   const isConfigured = !!process.env.ADMIN_PASSWORD;
   
