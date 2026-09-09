@@ -6,6 +6,37 @@ import {
   ToggleLeft, ToggleRight
 } from 'lucide-react';
 
+const PRESET_MESSAGES = {
+  welcome: [
+    "👋 Welcome to Shastika Global Impex! Thank you for reaching out. How may we assist you today?",
+    "Hello! 👋 Welcome to Shastika Global Impex. We're happy to assist you with your requirements.",
+    "Welcome to Shastika Global Impex! Thank you for contacting us. Please let us know how we can help you.",
+    "👋 Hello and welcome! Our team is ready to assist you. Please share your requirement with us.",
+    "Thank you for contacting Shastika Global Impex. We’re here to help with your product and business enquiries."
+  ],
+  firstTime: [
+    "👋 Hello! Welcome to Shastika Global Impex. We're delighted to connect with you. How may we assist you?",
+    "Welcome! It's a pleasure to have you connect with us. Please share your requirement, and our team will be happy to assist.",
+    "👋 Hi there! Thank you for choosing Shastika Global Impex. Please let us know what you're looking for.",
+    "Hello and welcome! We appreciate your interest in our products. How can our team assist you today?",
+    "👋 Welcome to Shastika Global Impex! We're glad to have you here. Feel free to share your product or business requirement with us."
+  ],
+  outsideHours: [
+    "Thank you for reaching out! 🕐 Our team is currently outside business hours. We'll get back to you as soon as possible.",
+    "Thank you for contacting us. Our team is currently unavailable, but we’ve received your message and will respond during business hours.",
+    "👋 Thanks for your message! We’re currently away from the office. Our team will get back to you at the earliest during business hours.",
+    "We appreciate you contacting Shastika Global Impex. Our office is currently closed. We’ll respond to your enquiry as soon as our team is available.",
+    "Thank you for your enquiry. 🌙 Our team is currently offline. Please leave your message, and we’ll get back to you during our next working hours."
+  ],
+  holiday: [
+    "🎉 Thank you for contacting Shastika Global Impex. Our team is currently on holiday. We’ll respond to your message when we return.",
+    "Thank you for reaching out! Our office is currently closed for a holiday. We’ll get back to you as soon as our team resumes work.",
+    "👋 We’ve received your message. Our team is currently away on holiday and will respond to your enquiry once we’re back.",
+    "Thank you for contacting us. 🎊 Our team is currently unavailable due to a holiday. We appreciate your patience and will respond at the earliest.",
+    "Happy holidays! ✨ Our team is currently away. Your message has been received, and we’ll get back to you once we resume business."
+  ]
+};
+
 interface Rule {
   id: number;
   keyword: string;
@@ -248,7 +279,22 @@ export default function AutoReplyRules() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Welcome Message</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Welcome Message</label>
+                <select 
+                  className="text-xs border border-slate-200 rounded-lg text-slate-600 focus:ring-emerald-500 focus:border-emerald-500 bg-white py-1.5 px-2 cursor-pointer shadow-sm max-w-[200px] sm:max-w-xs"
+                  onChange={(e) => {
+                    if (e.target.value) handleSettingChange('welcome_message', e.target.value);
+                    e.target.value = '';
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Choose a preset...</option>
+                  {PRESET_MESSAGES.welcome.map((opt, i) => (
+                    <option key={i} value={opt}>Preset {i + 1}: {opt.substring(0, 30)}...</option>
+                  ))}
+                </select>
+              </div>
               <textarea
                 value={settings.welcome_message || ''}
                 onChange={(e) => handleSettingChange('welcome_message', e.target.value)}
@@ -258,7 +304,22 @@ export default function AutoReplyRules() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">First-Time Customer Greeting</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">First-Time Customer Greeting</label>
+                <select 
+                  className="text-xs border border-slate-200 rounded-lg text-slate-600 focus:ring-emerald-500 focus:border-emerald-500 bg-white py-1.5 px-2 cursor-pointer shadow-sm max-w-[200px] sm:max-w-xs"
+                  onChange={(e) => {
+                    if (e.target.value) handleSettingChange('first_time_greeting', e.target.value);
+                    e.target.value = '';
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Choose a preset...</option>
+                  {PRESET_MESSAGES.firstTime.map((opt, i) => (
+                    <option key={i} value={opt}>Preset {i + 1}: {opt.substring(0, 30)}...</option>
+                  ))}
+                </select>
+              </div>
               <textarea
                 value={settings.first_time_greeting || ''}
                 onChange={(e) => handleSettingChange('first_time_greeting', e.target.value)}
@@ -268,7 +329,22 @@ export default function AutoReplyRules() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Outside Business Hours Reply</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Outside Business Hours Reply</label>
+                <select 
+                  className="text-xs border border-slate-200 rounded-lg text-slate-600 focus:ring-emerald-500 focus:border-emerald-500 bg-white py-1.5 px-2 cursor-pointer shadow-sm max-w-[200px] sm:max-w-xs"
+                  onChange={(e) => {
+                    if (e.target.value) handleSettingChange('outside_hours_reply', e.target.value);
+                    e.target.value = '';
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Choose a preset...</option>
+                  {PRESET_MESSAGES.outsideHours.map((opt, i) => (
+                    <option key={i} value={opt}>Preset {i + 1}: {opt.substring(0, 30)}...</option>
+                  ))}
+                </select>
+              </div>
               <textarea
                 value={settings.outside_hours_reply || ''}
                 onChange={(e) => handleSettingChange('outside_hours_reply', e.target.value)}
@@ -278,7 +354,22 @@ export default function AutoReplyRules() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Holiday Auto-Reply</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Holiday Auto-Reply</label>
+                <select 
+                  className="text-xs border border-slate-200 rounded-lg text-slate-600 focus:ring-emerald-500 focus:border-emerald-500 bg-white py-1.5 px-2 cursor-pointer shadow-sm max-w-[200px] sm:max-w-xs"
+                  onChange={(e) => {
+                    if (e.target.value) handleSettingChange('holiday_reply', e.target.value);
+                    e.target.value = '';
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Choose a preset...</option>
+                  {PRESET_MESSAGES.holiday.map((opt, i) => (
+                    <option key={i} value={opt}>Preset {i + 1}: {opt.substring(0, 30)}...</option>
+                  ))}
+                </select>
+              </div>
               <textarea
                 value={settings.holiday_reply || ''}
                 onChange={(e) => handleSettingChange('holiday_reply', e.target.value)}
