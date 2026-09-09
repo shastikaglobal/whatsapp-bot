@@ -26,6 +26,9 @@ router.post('/login', (req, res) => {
   }
 });
 
+router.post('/forgot-password', systemController.forgotPassword);
+router.post('/reset-password', systemController.resetPassword);
+
 // Protect all routes below this middleware
 router.use(authenticate);
 

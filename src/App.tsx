@@ -9,6 +9,7 @@ import Holidays from './pages/Holidays';
 import AutoReplyRules from './pages/AutoReplyRules';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Analytics from './pages/Analytics';
 import AppSettings from './pages/AppSettings';
 
@@ -26,6 +27,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
