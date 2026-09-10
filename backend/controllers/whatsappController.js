@@ -24,17 +24,21 @@ export const getConfig = async (req, res) => {
 
 export const addConfig = async (req, res) => {
   try {
-    const { display_name, meta_app_id, whatsapp_phone_number_id, whatsapp_phone_number, whatsapp_access_token } = req.body;
+    let { display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled } = req.body;
 
-    if (!display_name || !whatsapp_phone_number_id || !whatsapp_phone_number || !whatsapp_access_token) {
+    if (!display_name || !phone_number_id || !whatsapp_phone_number || !access_token) {
         return res.status(400).json({ error: 'Required fields are missing.' });
+    }
+
+    if (bot_enabled === undefined) {
+        bot_enabled = true;
     }
 
     const id = `conn_${crypto.randomUUID()}`;
 
     await pool.query(
-      'INSERT INTO whatsapp_connections (id, display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token) VALUES ($1, $2, $3, $4, $5, $6)',
-      [id, display_name, meta_app_id, whatsapp_phone_number_id, whatsapp_phone_number, whatsapp_access_token]
+      'INSERT INTO whatsapp_connections (id, display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled]
     );
 
     res.json({ message: 'WhatsApp connection added successfully.', id });
@@ -51,18 +55,23 @@ export const addConfig = async (req, res) => {
 export const updateConfig = async (req, res) => {
   try {
     const { id } = req.params;
-    const { display_name, meta_app_id, whatsapp_phone_number_id, whatsapp_phone_number, whatsapp_access_token } = req.body;
+    const { display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled } = req.body;
 
-    if (!display_name || !whatsapp_phone_number_id || !whatsapp_phone_number) {
+    if (!display_name || !phone_number_id || !whatsapp_phone_number) {
         return res.status(400).json({ error: 'Required fields are missing.' });
     }
 
     let query = 'UPDATE whatsapp_connections SET display_name = $1, meta_app_id = $2, phone_number_id = $3, whatsapp_phone_number = $4';
-    let params = [display_name, meta_app_id, whatsapp_phone_number_id, whatsapp_phone_number];
+    let params = [display_name, meta_app_id, phone_number_id, whatsapp_phone_number];
 
-    if (whatsapp_access_token && !whatsapp_access_token.includes('...[HIDDEN]...')) {
-        query += ', access_token = $5';
-        params.push(whatsapp_access_token);
+    if (bot_enabled !== undefined) {
+        query += `, bot_enabled = $${params.length + 1}`;
+        params.push(bot_enabled);
+    }
+
+    if (access_token && !access_token.includes('...[HIDDEN]...')) {
+        query += `, access_token = $${params.length + 1}`;
+        params.push(access_token);
     }
 
     query += ` WHERE id = $${params.length + 1}`;
@@ -113,8 +122,12 @@ export const testConnection = async (req, res) => {
   try {
     let { id, whatsapp_phone_number_id, whatsapp_access_token } = req.body;
 
+    console.log('[DEBUG] testConnection request body fields:', Object.keys(req.body));
+    console.log('[DEBUG] testConnection connection ID:', id);
+
     if (id && (!whatsapp_access_token || whatsapp_access_token.includes('...[HIDDEN]...'))) {
         const { rows: rows } = await pool.query('SELECT access_token, phone_number_id FROM whatsapp_connections WHERE id = $1', [id]);
+        console.log('[DEBUG] testConnection DB lookup success:', rows.length > 0);
         if (rows.length > 0) {
             whatsapp_access_token = rows[0].access_token;
             if (!whatsapp_phone_number_id) {
@@ -122,6 +135,9 @@ export const testConnection = async (req, res) => {
             }
         }
     }
+
+    console.log('[DEBUG] testConnection Phone Number ID exists:', !!whatsapp_phone_number_id);
+    console.log('[DEBUG] testConnection access token exists:', !!whatsapp_access_token);
 
     if (!whatsapp_phone_number_id || !whatsapp_access_token) {
       return res.status(400).json({ error: 'Phone Number ID and Access Token are required to test connection.' });
@@ -148,10 +164,23 @@ export const testConnection = async (req, res) => {
     }
   } catch (error) {
     console.error('WhatsApp connection test failed:', error.response?.data || error.message);
-    const errorMessage = error.response?.data?.error?.message || 'Failed to connect to Meta API. Please check your credentials.';
+    
+    let errorMessage = 'Failed to connect to Meta API. Please check your credentials.';
+    if (error.response?.data?.error?.message) {
+        const metaError = error.response.data.error.message;
+        if (metaError.includes('Cannot parse access token') || metaError.includes('Invalid OAuth access token')) {
+            errorMessage = 'Invalid Access Token: Please use a real Meta API access token instead of fake/placeholder credentials.';
+        } else {
+            errorMessage = `Meta API Error: ${metaError}`;
+        }
+    }
+
     if (req.body.id) {
         await pool.query("UPDATE whatsapp_connections SET connection_status = 'Error' WHERE id = $1", [req.body.id]);
     }
-    res.status(400).json({ error: errorMessage });
+    
+    // Instead of throwing a hard 400 error which shows up as a console error,
+    // we return a 200 with success: false for authentication failures, which the frontend handles.
+    res.status(200).json({ success: false, error: errorMessage });
   }
 };

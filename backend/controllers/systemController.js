@@ -39,7 +39,7 @@ export const getSystemStatus = async (req, res) => {
     // 4. Get some basic DB stats
     let tableCount = 0;
     try {
-      const { rows: tables } = await pool.query('SHOW TABLES');
+      const { rows: tables } = await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
       tableCount = tables.length;
     } catch (e) {
       // ignore

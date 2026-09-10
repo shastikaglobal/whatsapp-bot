@@ -7,7 +7,7 @@ export const getAnalytics = async (req, res) => {
     const params = [];
     
     if (startDate && endDate) {
-      dateFilter = ' WHERE timestamp >= ? AND timestamp <= ? ';
+      dateFilter = ' WHERE timestamp >= $1 AND timestamp <= $2 ';
       params.push(startDate, endDate);
     }
 
@@ -24,10 +24,10 @@ export const getAnalytics = async (req, res) => {
     const { rows: activeConversations } = await pool.query(`SELECT COUNT(*) as count FROM conversations WHERE status = 'open'`);
 
     // 4. Messages Received (customer -> bot)
-    const { rows: messagesReceived } = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter $1 dateFilter + ' AND ' : 'WHERE '} sender = 'customer'`, params);
+    const { rows: messagesReceived } = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter ? dateFilter + ' AND ' : 'WHERE '} sender = 'customer'`, params);
     
     // 5. Messages Sent (ai + human)
-    const { rows: messagesSent } = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter $1 dateFilter + ' AND ' : 'WHERE '} sender IN ('ai', 'human')`, params);
+    const { rows: messagesSent } = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter ? dateFilter + ' AND ' : 'WHERE '} sender IN ('ai', 'human')`, params);
 
     // 6. AI Replies vs Rule Replies
     const { rows: aiRuleStats } = await pool.query(`
@@ -35,7 +35,7 @@ export const getAnalytics = async (req, res) => {
         SUM(CASE WHEN content IN (SELECT reply_text FROM auto_reply_rules) THEN 1 ELSE 0 END) as rule_replies,
         SUM(CASE WHEN content NOT IN (SELECT reply_text FROM auto_reply_rules) THEN 1 ELSE 0 END) as ai_replies
       FROM messages 
-      ${dateFilter $1 dateFilter + ' AND ' : 'WHERE '} sender = 'ai'
+      ${dateFilter ? dateFilter + ' AND ' : 'WHERE '} sender = 'ai'
     `, params);
 
     // 7. Unread Conversations (last message was from customer)
@@ -50,9 +50,9 @@ export const getAnalytics = async (req, res) => {
       )
     `);
 
-    // 8. Average Response Time
+    // 8. Average Response Time (PostgreSQL compatible)
     const { rows: avgResponse } = await pool.query(`
-      SELECT AVG(TIMESTAMPDIFF(SECOND, m1.timestamp, m2.timestamp)) as avg_time
+      SELECT AVG(EXTRACT(EPOCH FROM (m2.timestamp - m1.timestamp))) as avg_time
       FROM messages m1
       JOIN messages m2 ON m1.customer_id = m2.customer_id
       WHERE m1.sender = 'customer' AND m2.sender IN ('ai', 'human')

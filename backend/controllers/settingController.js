@@ -32,7 +32,7 @@ export const updateSettings = async (req, res) => {
         continue;
       }
       await pool.query(
-        'INSERT INTO bot_settings (setting_key, setting_value) VALUES ($1, $2) ON DUPLICATE KEY UPDATE setting_value = $3',
+        'INSERT INTO bot_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = $3',
         [key, value, value]
       );
     }
