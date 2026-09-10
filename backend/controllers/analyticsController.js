@@ -15,31 +15,31 @@ export const getAnalytics = async (req, res) => {
     const startedFilter = dateFilter.replace(/timestamp/g, 'started_at');
 
     // 1. Total Customers
-    const [customers] = await pool.query(`SELECT COUNT(*) as count FROM customers ${createdFilter}`, params);
+    const { rows: customers } = await pool.query(`SELECT COUNT(*) as count FROM customers ${createdFilter}`, params);
     
     // 2. Total Conversations
-    const [conversations] = await pool.query(`SELECT COUNT(*) as count FROM conversations ${startedFilter}`, params);
+    const { rows: conversations } = await pool.query(`SELECT COUNT(*) as count FROM conversations ${startedFilter}`, params);
     
     // 3. Active Conversations
-    const [activeConversations] = await pool.query(`SELECT COUNT(*) as count FROM conversations WHERE status = 'open'`);
+    const { rows: activeConversations } = await pool.query(`SELECT COUNT(*) as count FROM conversations WHERE status = 'open'`);
 
     // 4. Messages Received (customer -> bot)
-    const [messagesReceived] = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter ? dateFilter + ' AND ' : 'WHERE '} sender = 'customer'`, params);
+    const { rows: messagesReceived } = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter $1 dateFilter + ' AND ' : 'WHERE '} sender = 'customer'`, params);
     
     // 5. Messages Sent (ai + human)
-    const [messagesSent] = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter ? dateFilter + ' AND ' : 'WHERE '} sender IN ('ai', 'human')`, params);
+    const { rows: messagesSent } = await pool.query(`SELECT COUNT(*) as count FROM messages ${dateFilter $1 dateFilter + ' AND ' : 'WHERE '} sender IN ('ai', 'human')`, params);
 
     // 6. AI Replies vs Rule Replies
-    const [aiRuleStats] = await pool.query(`
+    const { rows: aiRuleStats } = await pool.query(`
       SELECT 
         SUM(CASE WHEN content IN (SELECT reply_text FROM auto_reply_rules) THEN 1 ELSE 0 END) as rule_replies,
         SUM(CASE WHEN content NOT IN (SELECT reply_text FROM auto_reply_rules) THEN 1 ELSE 0 END) as ai_replies
       FROM messages 
-      ${dateFilter ? dateFilter + ' AND ' : 'WHERE '} sender = 'ai'
+      ${dateFilter $1 dateFilter + ' AND ' : 'WHERE '} sender = 'ai'
     `, params);
 
     // 7. Unread Conversations (last message was from customer)
-    const [unreadConversations] = await pool.query(`
+    const { rows: unreadConversations } = await pool.query(`
       SELECT COUNT(DISTINCT m1.customer_id) as count
       FROM messages m1
       WHERE m1.sender = 'customer' 
@@ -51,7 +51,7 @@ export const getAnalytics = async (req, res) => {
     `);
 
     // 8. Average Response Time
-    const [avgResponse] = await pool.query(`
+    const { rows: avgResponse } = await pool.query(`
       SELECT AVG(TIMESTAMPDIFF(SECOND, m1.timestamp, m2.timestamp)) as avg_time
       FROM messages m1
       JOIN messages m2 ON m1.customer_id = m2.customer_id
@@ -65,7 +65,7 @@ export const getAnalytics = async (req, res) => {
     `);
 
     // --- CHARTS DATA ---
-    const [messagesChart] = await pool.query(`
+    const { rows: messagesChart } = await pool.query(`
       SELECT DATE(timestamp) as date, 
              SUM(CASE WHEN sender = 'customer' THEN 1 ELSE 0 END) as received,
              SUM(CASE WHEN sender IN ('ai', 'human') THEN 1 ELSE 0 END) as sent
@@ -75,7 +75,7 @@ export const getAnalytics = async (req, res) => {
       ORDER BY date ASC
     `, params);
 
-    const [customersChart] = await pool.query(`
+    const { rows: customersChart } = await pool.query(`
       SELECT DATE(created_at) as date, COUNT(*) as count
       FROM customers
       ${createdFilter}

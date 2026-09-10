@@ -11,8 +11,8 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     }
 
     // 1. Fetch recent conversation history for context
-    const [messages] = await pool.query(
-      'SELECT sender, content FROM messages WHERE customer_id = ? ORDER BY timestamp ASC LIMIT 10',
+    const { rows: messages } = await pool.query(
+      'SELECT sender, content FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC LIMIT 10',
       [customerId]
     );
 
@@ -23,7 +23,7 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     });
 
     // 2. Fetch available products from DB for context
-    const [products] = await pool.query('SELECT name, category, description, price, moq, availability, shippingInfo FROM products');
+    const { rows: products } = await pool.query('SELECT name, category, description, price, moq, availability, shippingInfo FROM products');
     
     let productContext = 'Available Products:\n';
     if (products.length === 0) {
@@ -35,7 +35,7 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     }
 
     // 3. Fetch Bot Settings (e.g. Business Name, Fallback message)
-    const [settings] = await pool.query('SELECT setting_key, setting_value FROM bot_settings');
+    const { rows: settings } = await pool.query('SELECT setting_key, setting_value FROM bot_settings');
     let botContext = '';
     
     const aiModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value || 'gemini-3.6-flash';

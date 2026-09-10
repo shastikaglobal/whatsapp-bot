@@ -1,6 +1,4 @@
 import pool from '../config/db.js';
-import nodemailer from 'nodemailer';
-import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -41,7 +39,7 @@ export const getSystemStatus = async (req, res) => {
     // 4. Get some basic DB stats
     let tableCount = 0;
     try {
-      const [tables] = await pool.query('SHOW TABLES');
+      const { rows: tables } = await pool.query('SHOW TABLES');
       tableCount = tables.length;
     } catch (e) {
       // ignore
@@ -110,119 +108,44 @@ export const changePassword = async (req, res) => {
   }
 };
 
-export const forgotPassword = async (req, res) => {
+export const getSidebarStats = async (req, res) => {
   try {
-    const { email } = req.body;
+    const today = new Date().toISOString().split('T')[0];
 
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required.' });
-    }
+    // AI Bot status (global auto_reply_enabled)
+    const { rows: botSettings } = await pool.query("SELECT setting_value FROM bot_settings WHERE setting_key = 'auto_reply_enabled'");
+    const autoReplyEnabled = botSettings.length > 0 ? botSettings[0].setting_value === 'true' : true;
 
-    const adminEmail = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.trim() : null;
-    if (!adminEmail || email.toLowerCase().trim() !== adminEmail.toLowerCase()) {
-      // For security, do not reveal if the email exists or not, just return success or generic error
-      return res.status(400).json({ error: 'Invalid admin email provided.' });
-    }
+    // WhatsApp connection status (is any connected?)
+    const { rows: waConns } = await pool.query("SELECT connection_status FROM whatsapp_connections WHERE connection_status = 'Connected' LIMIT 1");
+    const whatsappConnected = waConns.length > 0;
 
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    if (!adminPassword) {
-      return res.status(500).json({ error: 'System error: password not configured.' });
-    }
+    // Auto Reply Rules (any active?)
+    const { rows: activeRules } = await pool.query('SELECT 1 FROM auto_reply_rules WHERE is_active = true LIMIT 1');
+    const hasActiveRules = activeRules.length > 0;
 
-    // Configure nodemailer transport
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: process.env.SMTP_PORT || 587,
-      secure: process.env.SMTP_PORT == 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+    // Today's Messages (received + sent)
+    const { rows: todayMessages } = await pool.query('SELECT COUNT(*) as count FROM messages WHERE DATE(timestamp) = $1', [today]);
+    
+    // Today's AI Replies
+    const { rows: todayAiReplies } = await pool.query("SELECT COUNT(*) as count FROM messages WHERE sender = 'ai' AND DATE(timestamp) = $1", [today]);
+
+    // Today's New Customers
+    const { rows: todayCustomers } = await pool.query('SELECT COUNT(*) as count FROM customers WHERE DATE(created_at) = $1', [today]);
+
+    res.json({
+      botActive: autoReplyEnabled,
+      whatsappConnected: whatsappConnected,
+      aiRepliesOn: autoReplyEnabled,
+      autoReplyRulesOn: hasActiveRules,
+      today: {
+        messages: todayMessages[0].count,
+        aiReplies: todayAiReplies[0].count,
+        newCustomers: todayCustomers[0].count
+      }
     });
-
-    // Generate a single-use JWT signed with the CURRENT password
-    const payload = { email: adminEmail };
-    // Token expires in 15 minutes
-    const token = jwt.sign(payload, adminPassword, { expiresIn: '15m' });
-    
-    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
-
-    const mailOptions = {
-      from: `"Shastika CRM" <${process.env.SMTP_USER}>`,
-      to: adminEmail,
-      subject: 'Secure Admin Password Reset',
-      html: `
-        <h3>Secure Password Reset Request</h3>
-        <p>You requested to recover your admin dashboard password.</p>
-        <p>Click the secure link below to set a new password. This link is valid for 15 minutes and can only be used once.</p>
-        <p><a href="${resetLink}" style="padding: 10px 20px; background-color: #10b981; color: white; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Reset Password</a></p>
-        <p style="margin-top: 20px; font-size: 12px; color: #64748b;">If you did not request this, you can safely ignore this email.</p>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log('Secure recovery email sent to admin.');
-    
-    res.json({ message: 'If the email matches our records, a secure recovery email has been sent.' });
-
   } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ error: 'Failed to process forgot password request.' });
-  }
-};
-
-export const resetPassword = async (req, res) => {
-  try {
-    const { token, newPassword } = req.body;
-
-    if (!token || !newPassword) {
-      return res.status(400).json({ error: 'Token and new password are required.' });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
-    }
-
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    if (!adminPassword) {
-      return res.status(500).json({ error: 'System error: password not configured.' });
-    }
-
-    // Verify token using the current password as the secret
-    let decoded;
-    try {
-      decoded = jwt.verify(token, adminPassword);
-    } catch (err) {
-      return res.status(401).json({ error: 'Invalid or expired reset token. Please request a new one.' });
-    }
-
-    const adminEmail = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.trim().toLowerCase() : null;
-    if (decoded.email !== adminEmail) {
-      return res.status(403).json({ error: 'Token does not match the configured admin email.' });
-    }
-
-    // Update the .env file with the new password
-    const envPath = path.join(__dirname, '..', '.env');
-    let envContent = fs.readFileSync(envPath, 'utf-8');
-
-    if (envContent.includes('ADMIN_PASSWORD=')) {
-      envContent = envContent.replace(
-        /ADMIN_PASSWORD=.*/,
-        `ADMIN_PASSWORD=${newPassword}`
-      );
-    } else {
-      envContent += `\nADMIN_PASSWORD=${newPassword}`;
-    }
-
-    fs.writeFileSync(envPath, envContent, 'utf-8');
-
-    // Update in-memory so the server doesn't require a restart immediately
-    process.env.ADMIN_PASSWORD = newPassword;
-
-    console.log('Admin password reset successfully via token.');
-    res.json({ message: 'Password has been successfully reset.' });
-  } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ error: 'Failed to reset password.' });
+    console.error('Sidebar stats error:', error);
+    res.status(500).json({ error: 'Failed to retrieve sidebar stats.' });
   }
 };

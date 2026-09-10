@@ -55,7 +55,7 @@ export default function Settings() {
   const webhookUrl = `${window.location.protocol}//${window.location.hostname}:3000/api/whatsapp/webhook`;
 
   return (
-    <div className="max-w-5xl mx-auto pb-12">
+    <div className="w-full max-w-7xl mx-auto pb-12">
       {toast && (
         <div className={`toast-banner ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
           {toast.type === 'success' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -77,7 +77,7 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
         
         {/* AI Provider Section */}
         <div className="panel-card flex flex-col gap-4">
@@ -199,44 +199,6 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* WhatsApp & Auto Reply */}
-        <div className="panel-card flex flex-col gap-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-2">
-            <MessageSquare className="w-5 h-5 text-teal-500" />
-            <h3 className="font-bold text-slate-800">WhatsApp & Meta API</h3>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">WABA ID</label>
-              <input type="text" value={settings.meta_app_id || ''} onChange={(e) => handleChange('meta_app_id', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Phone Number ID</label>
-              <input type="text" value={settings.whatsapp_phone_number_id || ''} onChange={(e) => handleChange('whatsapp_phone_number_id', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Access Token</label>
-            <input 
-              type="text" 
-              value={settings.whatsapp_access_token || ''} 
-              onChange={(e) => handleChange('whatsapp_access_token', e.target.value)}
-              placeholder="Enter permanent access token"
-              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-            />
-          </div>
-
-          <div className="mt-2 p-3 bg-slate-100 rounded-lg border border-slate-200">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Webhook URL (Read Only)</label>
-            <div className="text-sm font-mono text-slate-700 bg-white p-2 rounded border border-slate-200 overflow-hidden text-ellipsis whitespace-nowrap">
-              {webhookUrl}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1">Copy this URL to your Meta App Dashboard. Verification token is your Admin Password.</p>
-          </div>
-
-        </div>
       </div>
     </div>
   );

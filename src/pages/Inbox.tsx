@@ -159,10 +159,16 @@ export default function Inbox() {
 
       {/* Main Chat Area */}
       {selectedConvo ? (
-        <div className="flex-1 flex flex-col bg-slate-50/50">
+        <div className="flex-1 flex flex-col relative" style={{ backgroundColor: '#EFEAE2' }}>
           
+          {/* WhatsApp-inspired Doodle Pattern */}
+          <div className="absolute inset-0 z-0 pointer-events-none" style={{ 
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000000' fill-opacity='0.04' stroke='%23000000' stroke-opacity='0.04' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M40 40 h20 v15 h-5 l-5 5 v-5 h-10 z' fill='none'/%3E%3Cpath d='M120 40 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q 0 10 -10 15 q -10 -5 -10 -15 z' fill='none'/%3E%3Ccircle cx='80' cy='140' r='15' fill='none'/%3E%3Cpath d='M75 135 v2 M85 135 v2 M73 143 q 7 7 14 0' fill='none'/%3E%3Cpath d='M160 120 l 20 -10 l -5 25 l -5 -10 l -10 5 z' fill='none'/%3E%3Cpath d='M160 180 l 5 5 l 10 -10' fill='none'/%3E%3Cpath d='M30 160 v 20 h 15 v -20 z M35 175 h 5' fill='none'/%3E%3Ccircle cx='20' cy='100' r='1'/%3E%3Ccircle cx='180' cy='60' r='1'/%3E%3Ccircle cx='100' cy='90' r='1'/%3E%3Cpath d='M100 20 l 2 5 l 5 0 l -4 3 l 2 5 l -5 -4 l -5 4 l 2 -5 l -4 -3 l 5 0 z' fill='none'/%3E%3Cpath d='M10 10 q 5 0 5 -5 M15 15 l 10 10 M170 10 a10 10 0 0 0 10 10' fill='none'/%3E%3Cpath d='M50 180 h10 v10 h-10 z' fill='none'/%3E%3C/g%3E%3C/svg%3E")`, 
+            backgroundSize: '200px' 
+          }} />
+
           {/* Chat Header */}
-          <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+          <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between shrink-0 relative z-10 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
                 <User className="w-5 h-5 text-slate-600" />
@@ -196,20 +202,20 @@ export default function Inbox() {
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 relative z-10">
             {messages.map((msg, idx) => {
               const isMine = msg.sender === 'ai' || msg.sender === 'human';
               return (
                 <div key={msg.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-                    msg.sender === 'user' ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm' :
-                    msg.sender === 'ai' ? 'bg-blue-600 text-white rounded-tr-sm shadow-sm' :
-                    'bg-emerald-600 text-white rounded-tr-sm shadow-sm'
+                  <div className={`max-w-[70%] rounded-xl px-4 py-3 shadow-sm ${
+                    msg.sender === 'user' ? 'bg-white text-slate-800 rounded-tl-sm' :
+                    msg.sender === 'ai' ? 'bg-[#d9fdd3] text-slate-800 rounded-tr-sm' :
+                    'bg-[#d9fdd3] text-slate-800 rounded-tr-sm'
                   }`}>
                     <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-                    <div className={`text-[10px] mt-1.5 flex items-center gap-1 ${isMine ? 'text-white/70 justify-end' : 'text-slate-400'}`}>
-                      {msg.sender === 'ai' && <Bot className="w-3 h-3" />}
-                      {msg.sender === 'human' && <User className="w-3 h-3" />}
+                    <div className={`text-[10px] mt-1 flex items-center gap-1 ${isMine ? 'text-emerald-700 justify-end' : 'text-slate-400'}`}>
+                      {msg.sender === 'ai' && <Bot className="w-3 h-3 opacity-70" />}
+                      {msg.sender === 'human' && <User className="w-3 h-3 opacity-70" />}
                       {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
                   </div>
@@ -220,9 +226,9 @@ export default function Inbox() {
           </div>
 
           {/* Input Area */}
-          <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+          <div className="p-4 bg-[#f0f2f5] shrink-0 relative z-10">
             {selectedConvo.status === 'open' ? (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center gap-3 text-slate-500 text-sm">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center gap-3 text-slate-500 text-sm shadow-sm">
                 <Bot className="w-5 h-5" />
                 AI is currently handling this conversation. Take over to reply manually.
                 <button 
@@ -238,7 +244,7 @@ export default function Inbox() {
                   value={inputMessage}
                   onChange={e => setInputMessage(e.target.value)}
                   placeholder="Type a message..."
-                  className="flex-1 max-h-32 min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none text-sm"
+                  className="flex-1 max-h-32 min-h-[44px] bg-white rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm border-none"
                   rows={1}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -250,10 +256,9 @@ export default function Inbox() {
                 <button 
                   type="submit"
                   disabled={!inputMessage.trim()}
-                  className="h-[44px] px-5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white rounded-xl font-medium flex items-center gap-2 transition-colors shrink-0"
+                  className="h-[44px] w-[44px] flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white rounded-full transition-colors shrink-0 shadow-sm"
                 >
-                  <Send className="w-4 h-4" /> 
-                  <span className="hidden sm:inline">Send</span>
+                  <Send className="w-4 h-4 ml-0.5" /> 
                 </button>
               </form>
             )}

@@ -67,6 +67,20 @@ CREATE TABLE IF NOT EXISTS holidays (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- WhatsApp Connections Table
+CREATE TABLE IF NOT EXISTS whatsapp_connections (
+    id VARCHAR(50) PRIMARY KEY,
+    display_name VARCHAR(255) NOT NULL,
+    whatsapp_phone_number VARCHAR(50) NOT NULL,
+    phone_number_id VARCHAR(50) NOT NULL UNIQUE,
+    meta_app_id VARCHAR(100),
+    access_token TEXT NOT NULL,
+    bot_enabled BOOLEAN DEFAULT TRUE,
+    connection_status VARCHAR(50) DEFAULT 'Connected',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Bot Settings Table
 CREATE TABLE IF NOT EXISTS bot_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,

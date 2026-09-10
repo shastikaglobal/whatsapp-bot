@@ -9,9 +9,9 @@ import Holidays from './pages/Holidays';
 import AutoReplyRules from './pages/AutoReplyRules';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import ResetPassword from './pages/ResetPassword';
 import Analytics from './pages/Analytics';
 import AppSettings from './pages/AppSettings';
+import WhatsAppSettings from './pages/WhatsAppSettings';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const token = localStorage.getItem('shastika_token');
@@ -27,7 +27,6 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
         
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
@@ -39,6 +38,7 @@ export default function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="app-settings" element={<AppSettings />} />
+          <Route path="whatsapp" element={<WhatsAppSettings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

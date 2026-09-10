@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 
 export const getSettings = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT setting_key, setting_value, description FROM bot_settings');
+    const { rows: rows } = await pool.query('SELECT setting_key, setting_value, description FROM bot_settings');
     // Convert to a simple key-value object for easier frontend consumption
     const settings = {};
     const sensitiveKeys = ['ai_api_key', 'whatsapp_access_token'];
@@ -32,7 +32,7 @@ export const updateSettings = async (req, res) => {
         continue;
       }
       await pool.query(
-        'INSERT INTO bot_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+        'INSERT INTO bot_settings (setting_key, setting_value) VALUES ($1, $2) ON DUPLICATE KEY UPDATE setting_value = $3',
         [key, value, value]
       );
     }

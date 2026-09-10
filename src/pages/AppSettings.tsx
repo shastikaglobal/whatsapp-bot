@@ -4,7 +4,7 @@ import api from '../api/axios';
 import {
   Save, Shield, Bell, Globe, Monitor, LogOut, Lock,
   CheckCircle2, XCircle, AlertCircle, Clock, Database,
-  MessageSquare, Wifi, Server
+  MessageSquare, Wifi, Server, Eye, EyeOff
 } from 'lucide-react';
 
 export default function AppSettings() {
@@ -20,6 +20,7 @@ export default function AppSettings() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
 
   useEffect(() => {
     fetchAll();
@@ -121,7 +122,7 @@ export default function AppSettings() {
   );
 
   return (
-    <div className="max-w-5xl mx-auto pb-12">
+    <div className="w-full max-w-7xl mx-auto pb-12">
       {toast && (
         <div className={`toast-banner ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
           {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -144,7 +145,7 @@ export default function AppSettings() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:gap-8 items-start">
 
         {/* System Status */}
         <div className="panel-card flex flex-col gap-3">
@@ -269,13 +270,22 @@ export default function AppSettings() {
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Current Password</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Enter your current password"
-              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
-            />
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter your current password"
+                className="w-full p-2.5 pr-10 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+              >
+                {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
