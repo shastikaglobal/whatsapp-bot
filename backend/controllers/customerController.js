@@ -20,13 +20,23 @@ export const getCustomerById = async (req, res) => {
   }
 };
 
+import crypto from 'crypto';
+
 export const createCustomer = async (req, res) => {
   const { id, name, phone, country, language, lastMessage, status } = req.body;
   try {
-    const { rows: result } = await pool.query(
+    await pool.query(
       'INSERT INTO customers (id, name, phone, country, language, lastMessage, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, name, phone, country, language, lastMessage, status]
     );
+
+    // Create an empty conversation so the customer shows up in the WhatsApp Inbox
+    // (id is SERIAL, so we let PostgreSQL generate it automatically)
+    await pool.query(
+      'INSERT INTO conversations (customer_id, status) VALUES ($1, $2)',
+      [id, 'open']
+    );
+
     res.status(201).json({ message: 'Customer created successfully', id });
   } catch (error) {
     console.error("CREATE CUSTOMER ERROR:", error);

@@ -234,15 +234,25 @@ export default function AppSettings() {
               onChange={(e) => handleChange('timezone', e.target.value)}
               className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="Asia/Kolkata">Asia/Kolkata (IST, UTC+5:30)</option>
-              <option value="America/New_York">America/New_York (EST, UTC-5)</option>
-              <option value="America/Los_Angeles">America/Los_Angeles (PST, UTC-8)</option>
-              <option value="Europe/London">Europe/London (GMT, UTC+0)</option>
-              <option value="Europe/Berlin">Europe/Berlin (CET, UTC+1)</option>
-              <option value="Asia/Dubai">Asia/Dubai (GST, UTC+4)</option>
-              <option value="Asia/Shanghai">Asia/Shanghai (CST, UTC+8)</option>
-              <option value="Asia/Tokyo">Asia/Tokyo (JST, UTC+9)</option>
-              <option value="Australia/Sydney">Australia/Sydney (AEST, UTC+10)</option>
+              {typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf !== 'undefined'
+                ? Intl.supportedValuesOf('timeZone').map(tz => (
+                    <option key={tz} value={tz}>
+                      {tz.replace(/_/g, ' ')}
+                    </option>
+                  ))
+                : (
+                  <>
+                    <option value="Asia/Kolkata">Asia/Kolkata (IST, UTC+5:30)</option>
+                    <option value="America/New_York">America/New_York (EST, UTC-5)</option>
+                    <option value="America/Los_Angeles">America/Los_Angeles (PST, UTC-8)</option>
+                    <option value="Europe/London">Europe/London (GMT, UTC+0)</option>
+                    <option value="Europe/Berlin">Europe/Berlin (CET, UTC+1)</option>
+                    <option value="Asia/Dubai">Asia/Dubai (GST, UTC+4)</option>
+                    <option value="Asia/Shanghai">Asia/Shanghai (CST, UTC+8)</option>
+                    <option value="Asia/Tokyo">Asia/Tokyo (JST, UTC+9)</option>
+                    <option value="Australia/Sydney">Australia/Sydney (AEST, UTC+10)</option>
+                  </>
+                )}
             </select>
           </div>
 
