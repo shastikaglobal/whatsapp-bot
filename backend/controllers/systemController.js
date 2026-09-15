@@ -125,13 +125,13 @@ export const getSidebarStats = async (req, res) => {
     const hasActiveRules = activeRules.length > 0;
 
     // Today's Messages (received + sent)
-    const { rows: todayMessages } = await pool.query('SELECT COUNT(*) as count FROM messages WHERE DATE(timestamp) = $1', [today]);
+    const { rows: todayMessages } = await pool.query('SELECT COUNT(*) as count FROM messages WHERE timestamp::date = $1', [today]);
     
     // Today's AI Replies
-    const { rows: todayAiReplies } = await pool.query("SELECT COUNT(*) as count FROM messages WHERE sender = 'ai' AND DATE(timestamp) = $1", [today]);
+    const { rows: todayAiReplies } = await pool.query("SELECT COUNT(*) as count FROM messages WHERE sender = 'ai' AND timestamp::date = $1", [today]);
 
     // Today's New Customers
-    const { rows: todayCustomers } = await pool.query('SELECT COUNT(*) as count FROM customers WHERE DATE(created_at) = $1', [today]);
+    const { rows: todayCustomers } = await pool.query('SELECT COUNT(*) as count FROM customers WHERE created_at::date = $1', [today]);
 
     res.json({
       botActive: autoReplyEnabled,
@@ -139,9 +139,9 @@ export const getSidebarStats = async (req, res) => {
       aiRepliesOn: autoReplyEnabled,
       autoReplyRulesOn: hasActiveRules,
       today: {
-        messages: todayMessages[0].count,
-        aiReplies: todayAiReplies[0].count,
-        newCustomers: todayCustomers[0].count
+        messages: parseInt(todayMessages[0]?.count || 0, 10),
+        aiReplies: parseInt(todayAiReplies[0]?.count || 0, 10),
+        newCustomers: parseInt(todayCustomers[0]?.count || 0, 10)
       }
     });
   } catch (error) {

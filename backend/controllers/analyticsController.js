@@ -85,15 +85,15 @@ export const getAnalytics = async (req, res) => {
 
     res.json({
       metrics: {
-        totalCustomers: customers[0].count,
-        totalConversations: conversations[0].count,
-        activeConversations: activeConversations[0].count,
-        unreadConversations: unreadConversations[0].count,
-        messagesReceived: messagesReceived[0].count,
-        messagesSent: messagesSent[0].count,
-        ruleReplies: aiRuleStats[0].rule_replies || 0,
-        aiReplies: aiRuleStats[0].ai_replies || 0,
-        avgResponseTimeSeconds: avgResponse[0].avg_time || 0
+        totalCustomers: parseInt(customers[0]?.count || 0, 10),
+        totalConversations: parseInt(conversations[0]?.count || 0, 10),
+        activeConversations: parseInt(activeConversations[0]?.count || 0, 10),
+        unreadConversations: parseInt(unreadConversations[0]?.count || 0, 10),
+        messagesReceived: parseInt(messagesReceived[0]?.count || 0, 10),
+        messagesSent: parseInt(messagesSent[0]?.count || 0, 10),
+        ruleReplies: parseInt(aiRuleStats[0]?.rule_replies || 0, 10),
+        aiReplies: parseInt(aiRuleStats[0]?.ai_replies || 0, 10),
+        avgResponseTimeSeconds: parseFloat(avgResponse[0]?.avg_time || 0)
       },
       charts: {
         messages: messagesChart,
