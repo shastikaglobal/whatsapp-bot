@@ -234,8 +234,11 @@ export default function AppSettings() {
               onChange={(e) => handleChange('timezone', e.target.value)}
               className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              {typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf !== 'undefined'
-                ? Intl.supportedValuesOf('timeZone').map(tz => (
+              {typeof Intl !== 'undefined' && 
+                // @ts-ignore
+                typeof Intl.supportedValuesOf !== 'undefined'
+                // @ts-ignore
+                ? Intl.supportedValuesOf('timeZone').map((tz: any) => (
                     <option key={tz} value={tz}>
                       {tz.replace(/_/g, ' ')}
                     </option>

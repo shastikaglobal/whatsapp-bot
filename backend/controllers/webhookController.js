@@ -22,6 +22,21 @@ export const verifyWebhook = (req, res) => {
 
 export const handleIncomingMessage = async (req, res) => {
   try {
+    // 0. Verify Signature
+    if (process.env.META_APP_SECRET && req.rawBody) {
+      const signature = req.headers['x-hub-signature-256'];
+      if (!signature) {
+        console.warn('Missing X-Hub-Signature-256');
+        return res.sendStatus(401);
+      }
+      const hmac = crypto.createHmac('sha256', process.env.META_APP_SECRET);
+      const expectedSignature = 'sha256=' + hmac.update(req.rawBody).digest('hex');
+      if (signature !== expectedSignature) {
+        console.warn('Invalid X-Hub-Signature-256');
+        return res.sendStatus(401);
+      }
+    }
+
     const body = req.body;
     
     // Check if it's a WhatsApp status update or message
@@ -40,6 +55,11 @@ export const handleIncomingMessage = async (req, res) => {
         let connection = null;
         if (connRows.length > 0) {
             connection = connRows[0];
+        } else if (process.env.WHATSAPP_PHONE_NUMBER_ID && receivingPhoneNumberId === process.env.WHATSAPP_PHONE_NUMBER_ID) {
+            connection = {
+                bot_enabled: true,
+                access_token: process.env.WHATSAPP_ACCESS_TOKEN
+            };
         } else {
             console.warn(`Webhook received for unknown phone_number_id: ${receivingPhoneNumberId}`);
             return res.sendStatus(200); // Ignore if we don't manage this number

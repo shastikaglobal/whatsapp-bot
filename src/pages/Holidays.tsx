@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Calendar, Edit2, Trash2, X } from 'lucide-react';
 import api from '../api/axios';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface Holiday {
   id: string;
@@ -12,7 +13,9 @@ interface Holiday {
 export default function Holidays() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
   
   // Form state
   const [name, setName] = useState('');
@@ -32,20 +35,46 @@ export default function Holidays() {
     fetchHolidays();
   }, []);
 
+  const handleAdd = () => {
+    setEditingId(null);
+    setName('');
+    setDate('');
+    setEnabled(true);
+    setShowModal(true);
+  };
+
+  const handleEdit = (h: Holiday) => {
+    setEditingId(h.id);
+    setName(h.name);
+    // Format date for <input type="date"> (YYYY-MM-DD)
+    setDate(new Date(h.date).toISOString().split('T')[0]);
+    setEnabled(h.enabled);
+    setShowModal(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await api.post('/holidays', {
-        id: Date.now().toString(),
-        name,
-        date,
-        enabled: enabled ? 1 : 0
-      });
+      if (editingId) {
+        await api.put(`/holidays/${editingId}`, {
+          name,
+          date,
+          enabled: enabled ? 1 : 0
+        });
+      } else {
+        await api.post('/holidays', {
+          id: Date.now().toString(),
+          name,
+          date,
+          enabled: enabled ? 1 : 0
+        });
+      }
       setShowModal(false);
       setName('');
       setDate('');
       setEnabled(true);
+      setEditingId(null);
       fetchHolidays();
     } catch (err) {
       console.error(err);
@@ -62,7 +91,7 @@ export default function Holidays() {
           <p className="text-sm text-slate-500 mt-1">Manage dates when your business is closed to trigger out-of-office auto-replies.</p>
         </div>
         <button 
-          onClick={() => setShowModal(true)}
+          onClick={handleAdd}
           className="btn-save-primary whitespace-nowrap bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium"
         >
           <Plus className="w-4 h-4" /> Add Holiday
@@ -80,7 +109,7 @@ export default function Holidays() {
               You haven't set up any holiday rules yet. Add a holiday to automatically notify customers when you're away.
             </p>
             <button 
-              onClick={() => setShowModal(true)}
+              onClick={handleAdd}
               className="pill-button bg-white shadow-sm hover:shadow-md px-6 py-2.5 border border-slate-200 rounded-full text-emerald-600 font-medium flex items-center gap-2 mx-auto"
             >
               <Plus className="w-4 h-4" /> Create First Holiday
@@ -109,19 +138,21 @@ export default function Holidays() {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <button className="text-slate-400 hover:text-blue-600 mr-3 transition-colors">
+                    <button 
+                      onClick={() => handleEdit(h)}
+                      className="text-slate-400 hover:text-blue-600 mr-3 transition-colors"
+                    >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={async () => {
-                        if (confirm(`Are you sure you want to delete ${h.name}?`)) {
-                          try {
-                            await api.delete(`/holidays/${h.id}`);
-                            fetchHolidays();
-                          } catch (err) {
-                            console.error(err);
+                      onClick={() => {
+                        setConfirmConfig({
+                          title: 'Delete Holiday',
+                          message: `Are you sure you want to delete ${h.name}?`,
+                          onConfirm: () => {
+                            setHolidays(prev => prev.filter(item => item.id !== h.id));
                           }
-                        }
+                        });
                       }}
                       className="text-slate-400 hover:text-red-600 transition-colors"
                     >
@@ -139,7 +170,7 @@ export default function Holidays() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900">Add Holiday Rule</h3>
+              <h3 className="text-lg font-bold text-slate-900">{editingId ? 'Edit Holiday Rule' : 'Add Holiday Rule'}</h3>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -195,13 +226,22 @@ export default function Holidays() {
                   disabled={isLoading}
                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
-                  {isLoading ? 'Saving...' : 'Save Holiday'}
+                  {isLoading ? 'Saving...' : (editingId ? 'Save Changes' : 'Save Holiday')}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={confirmConfig?.onConfirm || (() => {})}
+        onCancel={() => setConfirmConfig(null)}
+        confirmText="Delete"
+      />
     </div>
   );
 }

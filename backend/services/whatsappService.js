@@ -22,12 +22,14 @@ export const sendWhatsAppMessage = async (to, text, phoneNumberId = null, access
         if (rows.length > 0) {
             phoneNumberId = rows[0].phone_number_id;
             accessToken = rows[0].access_token;
+        } else if (process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN) {
+            phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+            accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
         }
     }
 
     if (!phoneNumberId || !accessToken) {
-      console.log(`[SIMULATED WhatsApp] To ${to}: ${text}`);
-      return { simulated: true };
+      throw new Error('No WhatsApp credentials available in Database or Environment Variables');
     }
     
     const response = await axios.post(

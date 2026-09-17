@@ -38,7 +38,7 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     const { rows: settings } = await pool.query('SELECT setting_key, setting_value FROM bot_settings');
     let botContext = '';
     
-    const aiModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value || 'gemini-3.6-flash';
+    const aiModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value || 'gemini-1.5-flash';
     const responseStyle = settings.find(s => s.setting_key === 'ai_response_style')?.setting_value || 'Professional';
     const systemPromptBase = settings.find(s => s.setting_key === 'ai_system_prompt')?.setting_value || 'You are a helpful and polite WhatsApp customer support AI for a business. Your goal is to answer customer questions accurately based ONLY on the provided context below.';
     

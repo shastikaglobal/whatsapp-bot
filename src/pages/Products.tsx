@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, X, Trash2, Package } from 'lucide-react';
 import api from '../api/axios';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface Product {
   id: string;
@@ -17,6 +18,7 @@ export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -72,15 +74,14 @@ export default function Products() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete ${name}?`)) {
-      try {
-        await api.delete(`/products/${id}`);
-        fetchProducts();
-      } catch (err) {
-        console.error(err);
+  const handleDelete = (id: string, name: string) => {
+    setConfirmConfig({
+      title: 'Delete Product',
+      message: `Are you sure you want to delete ${name}?`,
+      onConfirm: () => {
+        setProducts(prev => prev.filter(p => p.id !== id));
       }
-    }
+    });
   };
 
   return (
@@ -251,6 +252,15 @@ export default function Products() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={confirmConfig?.onConfirm || (() => {})}
+        onCancel={() => setConfirmConfig(null)}
+        confirmText="Delete"
+      />
     </div>
   );
 }

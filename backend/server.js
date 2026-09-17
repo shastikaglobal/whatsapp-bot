@@ -16,12 +16,16 @@ const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // API and Webhook routes
+app.use('/api/webhook', webhookRoutes);
 app.use('/api', apiRoutes);
-app.use('/webhook', webhookRoutes);
 
 // In production, serve the built React frontend from dist/
 if (NODE_ENV === 'production') {

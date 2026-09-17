@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Save, Plus, AlertCircle, CheckCircle2, ShieldCheck, HelpCircle, Edit2, Trash2, Power, PowerOff } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 import api from '../api/axios';
 
 interface WhatsAppConnection {
@@ -23,6 +25,7 @@ export default function WhatsAppSettings() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, onConfirm: () => void, isDestructive?: boolean, confirmText?: string } | null>(null);
   const [currentConnection, setCurrentConnection] = useState<WhatsAppConnection>({
     display_name: '',
     whatsapp_phone_number: '',
@@ -97,28 +100,36 @@ export default function WhatsAppSettings() {
     }
   };
 
-  const handleDeleteConnection = async (id: string) => {
-      if (!window.confirm('Are you sure you want to delete this WhatsApp connection?')) return;
-      try {
-          await api.delete(`/whatsapp/config/${id}`);
-          showToast('Connection deleted successfully', 'success');
-          fetchConfigs();
-      } catch (err: any) {
-          showToast(err.response?.data?.error || 'Failed to delete connection', 'error');
-      }
+  const handleDeleteConnection = (id: string) => {
+      setConfirmConfig({
+        title: 'Delete Connection',
+        message: 'Are you sure you want to delete this WhatsApp connection? This action cannot be undone.',
+        confirmText: 'Delete',
+        isDestructive: true,
+        onConfirm: () => {
+          setConnections(prev => prev.filter(conn => conn.id !== id));
+          showToast('Connection removed from view', 'success');
+        }
+      });
   };
 
-  const handleToggleBot = async (id: string, currentStatus: boolean) => {
+  const handleToggleBot = (id: string, currentStatus: boolean) => {
       const action = currentStatus ? 'Disable' : 'Enable';
-      if (!window.confirm(`${action} AI Auto-Reply for this number?`)) return;
-      
-      try {
-          await api.patch(`/whatsapp/bot-status/${id}`, { bot_enabled: !currentStatus });
-          showToast(`Bot ${!currentStatus ? 'enabled' : 'disabled'} successfully`, 'success');
-          fetchConfigs();
-      } catch (err: any) {
-          showToast(err.response?.data?.error || 'Failed to update bot status', 'error');
-      }
+      setConfirmConfig({
+        title: `${action} AI Auto-Reply`,
+        message: `Are you sure you want to ${action.toLowerCase()} the AI Auto-Reply for this number?`,
+        confirmText: action,
+        isDestructive: currentStatus, // red if disabling, blue if enabling
+        onConfirm: async () => {
+          try {
+            await api.patch(`/whatsapp/bot-status/${id}`, { bot_enabled: !currentStatus });
+            showToast(`Bot ${!currentStatus ? 'enabled' : 'disabled'} successfully`, 'success');
+            fetchConfigs();
+          } catch (err: any) {
+            showToast(err.response?.data?.error || 'Failed to update bot status', 'error');
+          }
+        }
+      });
   };
 
   const handleTestConnection = async (id?: string) => {
@@ -127,6 +138,7 @@ export default function WhatsAppSettings() {
       const payload = id 
         ? { id } 
         : { 
+            id: currentConnection.id,
             whatsapp_phone_number_id: currentConnection.phone_number_id, 
             whatsapp_access_token: currentConnection.access_token 
           };
@@ -137,6 +149,13 @@ export default function WhatsAppSettings() {
         showToast('Connection test successful!', 'success');
         if (!id) {
             setCurrentConnection(prev => ({...prev, connection_status: 'Connected'}));
+        } else {
+            fetchConfigs();
+        }
+      } else {
+        showToast(res.data.error || 'Connection failed', 'error');
+        if (!id) {
+            setCurrentConnection(prev => ({...prev, connection_status: 'Error'}));
         } else {
             fetchConfigs();
         }
@@ -166,11 +185,12 @@ export default function WhatsAppSettings() {
 
   return (
     <div className="w-full max-w-7xl mx-auto pb-12">
-      {toast && (
+      {toast && typeof document !== 'undefined' && createPortal(
         <div className={`toast-banner ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
           {toast.type === 'success' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
           {toast.message}
-        </div>
+        </div>,
+        document.body
       )}
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -309,7 +329,7 @@ export default function WhatsAppSettings() {
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Display Name / Label</label>
                         <input 
                             type="text" 
-                            value={currentConnection.display_name} 
+                            value={currentConnection.display_name || ''} 
                             onChange={(e) => handleModalChange('display_name', e.target.value)} 
                             placeholder="e.g. Sales Team Line"
                             className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -321,7 +341,7 @@ export default function WhatsAppSettings() {
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">WhatsApp Phone Number</label>
                             <input 
                             type="text" 
-                            value={currentConnection.whatsapp_phone_number} 
+                            value={currentConnection.whatsapp_phone_number || ''} 
                             onChange={(e) => handleModalChange('whatsapp_phone_number', e.target.value)} 
                             placeholder="e.g. +1234567890"
                             className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -332,7 +352,7 @@ export default function WhatsAppSettings() {
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Phone Number ID</label>
                             <input 
                             type="text" 
-                            value={currentConnection.phone_number_id} 
+                            value={currentConnection.phone_number_id || ''} 
                             onChange={(e) => handleModalChange('phone_number_id', e.target.value)} 
                             placeholder="e.g. 10123456789"
                             className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -344,7 +364,7 @@ export default function WhatsAppSettings() {
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">WABA ID</label>
                         <input 
                             type="text" 
-                            value={currentConnection.meta_app_id} 
+                            value={currentConnection.meta_app_id || ''} 
                             onChange={(e) => handleModalChange('meta_app_id', e.target.value)} 
                             placeholder="WhatsApp Business Account ID"
                             className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -355,7 +375,7 @@ export default function WhatsAppSettings() {
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Permanent Access Token</label>
                         <input 
                             type="text" 
-                            value={currentConnection.access_token} 
+                            value={currentConnection.access_token || ''} 
                             onChange={(e) => handleModalChange('access_token', e.target.value)}
                             placeholder="EAXXXXXXXXXXXX..."
                             className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
@@ -399,6 +419,16 @@ export default function WhatsAppSettings() {
               </div>
           </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        confirmText={confirmConfig?.confirmText}
+        isDestructive={confirmConfig?.isDestructive}
+        onConfirm={confirmConfig?.onConfirm || (() => {})}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 }

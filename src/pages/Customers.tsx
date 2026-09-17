@@ -1,22 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, CheckCircle2 } from 'lucide-react';
 
 interface Customer {
   id: string;
   name: string;
   phone: string;
   country: string;
-  language: string;
+  email?: string;
+  notes?: string;
   status: string;
 }
 
 export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', country: '', language: '' });
+  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', country: '', email: '', notes: '', status: 'Active' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     fetchCustomers();
@@ -35,12 +37,15 @@ export default function Customers() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
       const id = 'cust_' + Date.now();
-      await api.post('/customers', { ...newCustomer, id, status: 'Active' });
+      await api.post('/customers', { ...newCustomer, id });
       setIsModalOpen(false);
-      setNewCustomer({ name: '', phone: '', country: '', language: '' });
+      setNewCustomer({ name: '', phone: '', country: '', email: '', notes: '', status: 'Active' });
       fetchCustomers();
+      setSuccess('Customer added successfully!');
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to add customer');
     } finally {
@@ -50,6 +55,12 @@ export default function Customers() {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+      {success && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-lg shadow-sm border border-emerald-100 flex items-center gap-2 text-sm font-medium">
+          <CheckCircle2 className="w-4 h-4" />
+          {success}
+        </div>
+      )}
       <div className="p-6 border-b border-slate-100 flex justify-between items-center">
         <h2 className="text-lg font-bold text-slate-900">Customer Directory</h2>
         <button
@@ -73,7 +84,10 @@ export default function Customers() {
           <tbody className="divide-y divide-slate-100">
             {customers.map((c) => (
               <tr key={c.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4 font-medium text-slate-900">{c.name}</td>
+                <td className="px-6 py-4 font-medium text-slate-900">
+                  {c.name}
+                  {c.email && <div className="text-xs text-slate-400 font-normal mt-0.5">{c.email}</div>}
+                </td>
                 <td className="px-6 py-4">{c.phone}</td>
                 <td className="px-6 py-4">{c.country}</td>
                 <td className="px-6 py-4">
@@ -103,15 +117,19 @@ export default function Customers() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleAddCustomer} className="p-4 space-y-4">
+            <form onSubmit={handleAddCustomer} className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
               {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div>}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Name</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Name *</label>
                 <input required type="text" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" placeholder="Customer Name" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Phone</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Phone *</label>
                 <input required type="text" value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" placeholder="+1234567890" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Email</label>
+                <input type="email" value={newCustomer.email} onChange={e => setNewCustomer({...newCustomer, email: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" placeholder="customer@example.com" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -119,9 +137,16 @@ export default function Customers() {
                   <input type="text" value={newCustomer.country} onChange={e => setNewCustomer({...newCustomer, country: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" placeholder="e.g. US" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Language</label>
-                  <input type="text" value={newCustomer.language} onChange={e => setNewCustomer({...newCustomer, language: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" placeholder="e.g. English" />
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+                  <select value={newCustomer.status} onChange={e => setNewCustomer({...newCustomer, status: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Notes</label>
+                <textarea rows={3} value={newCustomer.notes} onChange={e => setNewCustomer({...newCustomer, notes: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-none" placeholder="Additional details..."></textarea>
               </div>
               <div className="pt-2">
                 <button disabled={loading} type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium p-2.5 rounded-lg transition-colors disabled:opacity-50 flex justify-center">

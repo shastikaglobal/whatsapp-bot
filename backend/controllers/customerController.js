@@ -20,14 +20,12 @@ export const getCustomerById = async (req, res) => {
   }
 };
 
-import crypto from 'crypto';
-
 export const createCustomer = async (req, res) => {
-  const { id, name, phone, country, language, lastMessage, status } = req.body;
+  const { id, name, phone, country, language, lastMessage, status, email, notes } = req.body;
   try {
     await pool.query(
-      'INSERT INTO customers (id, name, phone, country, language, lastMessage, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, name, phone, country, language, lastMessage, status]
+      'INSERT INTO customers (id, name, phone, country, language, lastMessage, status, email, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, name, phone, country, language, lastMessage, status, email, notes]
     );
 
     // Create an empty conversation so the customer shows up in the WhatsApp Inbox
@@ -50,11 +48,11 @@ export const createCustomer = async (req, res) => {
 };
 
 export const updateCustomer = async (req, res) => {
-  const { name, phone, country, language, lastMessage, status } = req.body;
+  const { name, phone, country, language, lastMessage, status, email, notes } = req.body;
   try {
     await pool.query(
-      'UPDATE customers SET name = $1, phone = $2, country = $3, language = $4, lastMessage = $5, status = $6 WHERE id = $7',
-      [name, phone, country, language, lastMessage, status, req.params.id]
+      'UPDATE customers SET name = $1, phone = $2, country = $3, language = $4, lastMessage = $5, status = $6, email = $7, notes = $8 WHERE id = $9',
+      [name, phone, country, language, lastMessage, status, email, notes, req.params.id]
     );
     res.json({ message: 'Customer updated successfully' });
   } catch (error) {
