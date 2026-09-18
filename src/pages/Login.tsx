@@ -17,7 +17,7 @@ export default function Login() {
     try {
       const res = await api.post('/login', { password });
       if (res.data.token) {
-        localStorage.setItem('shastika_token', res.data.token);
+        sessionStorage.setItem('shastika_token', res.data.token);
         navigate('/');
       }
     } catch (err: any) {

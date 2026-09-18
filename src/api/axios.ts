@@ -5,7 +5,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('shastika_token');
+  const token = sessionStorage.getItem('shastika_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

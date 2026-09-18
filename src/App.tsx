@@ -14,7 +14,7 @@ import AppSettings from './pages/AppSettings';
 import WhatsAppSettings from './pages/WhatsAppSettings';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const token = localStorage.getItem('shastika_token');
+  const token = sessionStorage.getItem('shastika_token');
   const location = useLocation();
   if (!token) {
     return <Navigate to="/login" state={{ from: location }} replace />;

@@ -79,7 +79,7 @@ export default function AppSettings() {
       setConfirmPassword('');
       // Force re-login with new password
       setTimeout(() => {
-        localStorage.removeItem('shastika_token');
+        sessionStorage.removeItem('shastika_token');
         navigate('/login');
       }, 1500);
     } catch (err: any) {
@@ -91,7 +91,7 @@ export default function AppSettings() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('shastika_token');
+    sessionStorage.removeItem('shastika_token');
     navigate('/login');
   };
 
