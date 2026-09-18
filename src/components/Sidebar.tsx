@@ -51,6 +51,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
     { name: 'Customers', path: '/customers', icon: Users },
     { name: 'Products', path: '/products', icon: Package },
   ];
+  if (sessionStorage.getItem('shastika_role') === 'Admin') {
+    coreSuite.push({ name: 'Employees', path: '/employees', icon: Users });
+  }
 
   const automationEngine = [
     { name: 'Auto Reply', path: '/rules', icon: Workflow },

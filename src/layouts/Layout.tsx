@@ -11,7 +11,8 @@ import {
   Workflow, 
   Settings,
   BarChart3,
-  Bell
+  Bell,
+  UserCheck
 } from 'lucide-react';
 
 export default function Layout() {
@@ -28,6 +29,7 @@ export default function Layout() {
     '/settings': { title: 'AI Settings', icon: Settings, color: 'text-slate-600', bg: 'bg-slate-200' },
     '/whatsapp': { title: 'WhatsApp API', icon: MessageSquareText, color: 'text-emerald-600', bg: 'bg-emerald-100' },
     '/analytics': { title: 'Analytics', icon: BarChart3, color: 'text-indigo-600', bg: 'bg-indigo-100' },
+    '/employees': { title: 'Employees', icon: UserCheck, color: 'text-blue-600', bg: 'bg-blue-100' },
     '/app-settings': { title: 'App Settings', icon: Settings, color: 'text-slate-600', bg: 'bg-slate-200' },
   };
 
@@ -69,11 +71,11 @@ export default function Layout() {
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
              <div className="flex items-center gap-3 cursor-pointer group">
                <div className="text-right hidden sm:block">
-                 <div className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">Admin</div>
-                 <div className="text-[10px] text-emerald-600 font-medium uppercase tracking-wider">Online</div>
+                 <div className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{sessionStorage.getItem('shastika_name') || 'User'}</div>
+                 <div className="text-[10px] text-emerald-600 font-medium uppercase tracking-wider">{sessionStorage.getItem('shastika_role') || 'Role'}</div>
                </div>
                <div className="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl shadow-md flex items-center justify-center text-white font-bold text-sm ring-2 ring-white">
-                 A
+                 {(sessionStorage.getItem('shastika_name') || 'U').charAt(0).toUpperCase()}
                </div>
              </div>
           </div>

@@ -8,30 +8,66 @@ import * as messageController from '../controllers/messageController.js';
 import * as analyticsController from '../controllers/analyticsController.js';
 import * as systemController from '../controllers/systemController.js';
 import * as whatsappController from '../controllers/whatsappController.js';
-import { authenticate } from '../authMiddleware.js';
+import * as employeeController from '../controllers/employeeController.js';
+import { authenticate, authorizeAdmin } from '../authMiddleware.js';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import pool from '../config/db.js';
 
 const router = express.Router();
 
-router.post('/login', (req, res) => {
-  const { password } = req.body || {};
-  const adminPassword = (process.env.ADMIN_PASSWORD || 'admin123').trim();
+router.post('/login', async (req, res) => {
+  const { username, password } = req.body || {};
 
-  if (password === adminPassword) {
-    console.log('Admin login successful.');
-    res.json({ token: adminPassword });
-  } else {
-    res.status(401).json({ error: 'Invalid password' });
+  try {
+    const { rows } = await pool.query('SELECT * FROM employees WHERE username = $1', [username]);
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = rows[0];
+    if (user.status !== 'Active') {
+      return res.status(403).json({ error: 'Account is inactive or on leave' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, name: user.name },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '24h' }
+    );
+
+    console.log(`User login successful: ${username} (${user.role})`);
+    res.json({ token, role: user.role, name: user.name });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Protect all routes below this middleware
 router.use(authenticate);
 
+// Employees (Admin Only)
+router.get('/employees', authorizeAdmin, employeeController.getEmployees);
+router.post('/employees', authorizeAdmin, employeeController.createEmployee);
+router.put('/employees/:id', authorizeAdmin, employeeController.updateEmployee);
+router.put('/employees/:id/status', authorizeAdmin, employeeController.updateEmployeeStatus);
+router.delete('/employees/:id', authorizeAdmin, employeeController.deleteEmployee);
+
+// BDEs (Accessible by any authenticated user for assignment)
+router.get('/bdes', employeeController.getActiveBDEs);
+
 // Customers
 router.get('/customers', customerController.getCustomers);
 router.get('/customers/:id', customerController.getCustomerById);
 router.post('/customers', customerController.createCustomer);
 router.put('/customers/:id', customerController.updateCustomer);
+router.put('/customers/:id/assign', customerController.assignBDE);
 router.delete('/customers/:id', customerController.deleteCustomer);
 
 // Products

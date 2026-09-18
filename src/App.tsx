@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import Analytics from './pages/Analytics';
 import AppSettings from './pages/AppSettings';
 import WhatsAppSettings from './pages/WhatsAppSettings';
+import Employees from './pages/Employees';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const token = sessionStorage.getItem('shastika_token');
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="rules" element={<AutoReplyRules />} />
           <Route path="settings" element={<Settings />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="employees" element={<Employees />} />
           <Route path="app-settings" element={<AppSettings />} />
           <Route path="whatsapp" element={<WhatsAppSettings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, KeyRound } from 'lucide-react';
+import { Bot, KeyRound, User } from 'lucide-react';
 import api from '../api/axios';
 
 export default function Login() {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -15,9 +16,11 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const res = await api.post('/login', { password });
+      const res = await api.post('/login', { username, password });
       if (res.data.token) {
         sessionStorage.setItem('shastika_token', res.data.token);
+        sessionStorage.setItem('shastika_role', res.data.role);
+        sessionStorage.setItem('shastika_name', res.data.name);
         navigate('/');
       }
     } catch (err: any) {
@@ -40,18 +43,29 @@ export default function Login() {
             <Bot className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white text-center tracking-tight">Shastika Bot CRM</h1>
-          <p className="text-slate-400 text-sm mt-2">Enter the admin password to continue</p>
+          <p className="text-slate-400 text-sm mt-2">Enter your credentials to continue</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
-          <div>
+          <div className="space-y-4">
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Username"
+                className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                required
+              />
+            </div>
             <div className="relative">
               <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Admin Password"
+                placeholder="Password"
                 className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 required
               />

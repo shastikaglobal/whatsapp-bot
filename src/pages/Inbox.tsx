@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X } from 'lucide-react';
+import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X, Check } from 'lucide-react';
 import api from '../api/axios';
 
 interface Conversation {
@@ -9,6 +9,11 @@ interface Conversation {
   customer_phone: string;
   status: 'open' | 'handover' | 'resolved';
   updated_at: string;
+  assigned_bde_id?: string;
+  assigned_bde_name?: string;
+  intent?: string;
+  is_important?: boolean;
+  requires_admin_attention?: boolean;
 }
 
 interface Message {
@@ -25,7 +30,35 @@ export default function Inbox() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [search, setSearch] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [bdes, setBdes] = useState<{id: string, name: string}[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const fetchBDEs = async () => {
+    try {
+      const res = await api.get('/bdes');
+      setBdes(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchBDEs();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchConversations = async () => {
     try {
@@ -60,6 +93,7 @@ export default function Inbox() {
 
   const handleSelectConvo = (convo: Conversation) => {
     setSelectedConvo(convo);
+    setIsDropdownOpen(false);
     fetchMessages(convo.customer_id);
   };
 
@@ -89,12 +123,26 @@ export default function Inbox() {
     }
   };
 
-  const handleTakeover = async (status: 'open' | 'handover') => {
+  const handleTakeover = async (status: 'open' | 'handover' | 'resolved') => {
     if (!selectedConvo) return;
     try {
       await api.put('/whatsapp/takeover', { customerId: selectedConvo.customer_id, status });
       setSelectedConvo({ ...selectedConvo, status });
       fetchConversations();
+      setIsDropdownOpen(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAssignBDE = async (bdeId: string) => {
+    if (!selectedConvo) return;
+    try {
+      await api.put(`/customers/${selectedConvo.customer_id}/assign`, { assigned_bde_id: bdeId });
+      const assignedBde = bdes.find(b => b.id.toString() === bdeId.toString());
+      setSelectedConvo({ ...selectedConvo, assigned_bde_id: bdeId, assigned_bde_name: assignedBde?.name });
+      fetchConversations();
+      setIsAssignModalOpen(false);
     } catch (err) {
       console.error(err);
     }
@@ -132,8 +180,20 @@ export default function Inbox() {
               className={`p-4 border-b border-slate-100 cursor-pointer transition-colors ${selectedConvo?.id === convo.id ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : 'hover:bg-white border-l-4 border-l-transparent'}`}
             >
               <div className="flex justify-between items-start mb-1">
-                <span className="font-bold text-slate-800">{convo.customer_name || 'Unknown User'}</span>
-                <span className="text-[10px] text-slate-500">
+                <div className="flex flex-col">
+                  <span className="font-bold text-slate-800 flex items-center gap-2">
+                    {convo.customer_name || 'Unknown User'}
+                    {convo.requires_admin_attention && <AlertCircle className="w-4 h-4 text-rose-500" />}
+                  </span>
+                  {convo.intent && (
+                    <span className={`text-[10px] w-fit px-2 py-0.5 mt-1 rounded-full font-medium ${
+                      convo.is_important ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {convo.intent}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-500 whitespace-nowrap">
                   {new Date(convo.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </span>
               </div>
@@ -168,7 +228,7 @@ export default function Inbox() {
           }} />
 
           {/* Chat Header */}
-          <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between shrink-0 relative z-10 shadow-sm">
+          <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between shrink-0 relative z-[999] shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
                 <User className="w-5 h-5 text-slate-600" />
@@ -195,14 +255,39 @@ export default function Inbox() {
                   <User className="w-4 h-4" /> Human Takeover
                 </button>
               )}
-              <button className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
-                <MoreVertical className="w-5 h-5" />
-              </button>
+              <div className="relative" ref={dropdownRef}>
+                <button 
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className={`p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors ${isDropdownOpen ? 'bg-slate-100 text-slate-600' : 'hover:bg-slate-100'}`}
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-slate-50 mb-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Options</p>
+                    </div>
+                    <button 
+                      onClick={() => { setIsAssignModalOpen(true); setIsDropdownOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <User className="w-4 h-4 text-slate-400" /> Assign BDE
+                    </button>
+                    <button 
+                      onClick={() => handleTakeover('resolved')}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <Check className="w-4 h-4 text-slate-400" /> Mark Resolved
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 relative z-10">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.map((msg, idx) => {
               const isMine = msg.sender === 'ai' || msg.sender === 'human';
               return (
@@ -303,6 +388,12 @@ export default function Inbox() {
             
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</h4>
+              {selectedConvo.requires_admin_attention ? (
+                <div className="flex items-start gap-2 text-rose-700 text-sm mb-3 font-bold bg-rose-50 p-2 rounded border border-rose-200">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>BDE On Leave. Admin attention required.</p>
+                </div>
+              ) : null}
               {selectedConvo.status === 'handover' ? (
                 <div className="flex items-start gap-2 text-amber-700 text-sm">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -313,6 +404,47 @@ export default function Inbox() {
                   <Bot className="w-4 h-4 mt-0.5 shrink-0" />
                   <p>AI is actively answering messages automatically.</p>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Assign BDE Modal */}
+      {isAssignModalOpen && selectedConvo && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl border border-slate-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-800">Assign BDE</h2>
+              <button onClick={() => setIsAssignModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-2 max-h-60 overflow-y-auto mb-6">
+              {bdes.map(bde => (
+                <button
+                  key={bde.id}
+                  onClick={() => handleAssignBDE(bde.id)}
+                  className={`w-full text-left p-4 rounded-xl border flex items-center justify-between transition-colors ${
+                    selectedConvo.assigned_bde_id === bde.id 
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                      : 'border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium">{bde.name}</span>
+                  </div>
+                  {selectedConvo.assigned_bde_id === bde.id && <Check className="w-5 h-5 text-emerald-500" />}
+                </button>
+              ))}
+              {bdes.length === 0 && (
+                <div className="text-center p-4 text-sm text-slate-500">No active BDEs found. Create one in Employee Management.</div>
               )}
             </div>
           </div>

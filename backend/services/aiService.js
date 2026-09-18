@@ -7,7 +7,7 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.warn('GEMINI_API_KEY is not configured. Falling back to default message.');
-      return 'I am currently unable to process your request as my AI is not fully configured.';
+      return { reply_text: 'I am currently unable to process your request as my AI is not fully configured.', intent: 'General', is_important: false };
     }
 
     // 1. Fetch recent conversation history for context
@@ -77,8 +77,15 @@ Preserve the customer's conversational style.
 CONVERSATION HISTORY:
 ${historyText}
 
-Current Customer Message: ${incomingMessage}
-Your Reply:`;
+OUTPUT FORMAT:
+You MUST output exactly and ONLY a JSON object with the following structure. Do not use markdown code blocks.
+{
+  "intent": "string (One of: Order, Product Enquiry, Price Enquiry, Quotation, Complaint, Follow-up, General)",
+  "is_important": "boolean (true if intent is Order, Quotation, or Complaint, false otherwise)",
+  "reply_text": "string (Your actual reply to the customer)"
+}
+
+Current Customer Message: ${incomingMessage}`;
 
     console.log("=== DEBUG SYSTEM PROMPT ===");
     console.log(systemPrompt);
@@ -98,9 +105,31 @@ Your Reply:`;
       }
     });
 
-    const aiReply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawReply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log("=== AI RAW OUTPUT ===");
+    console.log(rawReply);
     console.log("===========================");
-    return response.data.candidates[0].content.parts[0].text;
+    
+    if (!rawReply) throw new Error("Empty response from AI");
+    
+    // Clean up potential markdown formatting (```json ... ```)
+    let jsonStr = rawReply.replace(/```json/gi, '').replace(/```/g, '').trim();
+    
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return {
+        reply_text: parsed.reply_text || "Sorry, I didn't understand.",
+        intent: parsed.intent || "General",
+        is_important: !!parsed.is_important
+      };
+    } catch (e) {
+      console.warn("Failed to parse JSON from AI, returning raw text", jsonStr);
+      return {
+        reply_text: jsonStr,
+        intent: "General",
+        is_important: false
+      };
+    }
   } catch (error) {
     console.error('=== AI Generation Error ===');
     console.error('HTTP Status:', error.response?.status);
@@ -108,6 +137,6 @@ Your Reply:`;
     console.error('Response Data:', JSON.stringify(error.response?.data, null, 2));
     console.error('Message:', error.message);
     console.error('===========================');
-    return 'I am sorry, I am experiencing technical difficulties right now.';
+    return { reply_text: 'I am sorry, I am experiencing technical difficulties right now.', intent: 'General', is_important: false };
   }
 };

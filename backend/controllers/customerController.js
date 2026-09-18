@@ -2,7 +2,12 @@ import pool from '../config/db.js';
 
 export const getCustomers = async (req, res) => {
   try {
-    const { rows: rows } = await pool.query('SELECT * FROM customers ORDER BY created_at DESC');
+    const { rows: rows } = await pool.query(`
+      SELECT c.*, e.name as assigned_bde_name
+      FROM customers c
+      LEFT JOIN employees e ON c.assigned_bde_id = e.id
+      ORDER BY c.created_at DESC
+    `);
     res.json(rows);
   } catch (error) {
     console.error("GET CUSTOMERS ERROR:", error);
@@ -64,6 +69,20 @@ export const deleteCustomer = async (req, res) => {
   try {
     await pool.query('DELETE FROM customers WHERE id = $1', [req.params.id]);
     res.json({ message: 'Customer deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const assignBDE = async (req, res) => {
+  const { id } = req.params;
+  const { assigned_bde_id } = req.body;
+  try {
+    await pool.query(
+      'UPDATE customers SET assigned_bde_id = $1 WHERE id = $2',
+      [assigned_bde_id, id]
+    );
+    res.json({ message: 'BDE assigned successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

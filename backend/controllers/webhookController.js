@@ -73,6 +73,19 @@ export const handleIncomingMessage = async (req, res) => {
 
         // 1. Ensure Customer Exists
         const customerId = `cust_${phoneNumber}`;
+        
+        const { rows: existingCust } = await pool.query('SELECT assigned_bde_id FROM customers WHERE id = $1', [customerId]);
+        let assignedBdeId = existingCust.length > 0 ? existingCust[0].assigned_bde_id : null;
+        let requiresAdminAttention = false;
+
+        if (assignedBdeId) {
+            const { rows: bdeRows } = await pool.query('SELECT status FROM employees WHERE id = $1', [assignedBdeId]);
+            if (bdeRows.length > 0 && bdeRows[0].status === 'On Leave') {
+                requiresAdminAttention = true;
+                console.log(`[Leave-Aware Routing] Customer ${customerId} assigned to BDE ${assignedBdeId} who is on leave. Flagging for Admin.`);
+            }
+        }
+
         await pool.query(
           'INSERT INTO customers (id, name, phone, lastMessage) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = $5, lastMessage = $6',
           [customerId, name, phoneNumber, msgText, name, msgText]
@@ -84,14 +97,14 @@ export const handleIncomingMessage = async (req, res) => {
         
         if (convRows.length === 0) {
           await pool.query(
-            'INSERT INTO conversations (customer_id, status) VALUES ($1, $2)',
-            [customerId, 'open']
+            'INSERT INTO conversations (customer_id, status, requires_admin_attention) VALUES ($1, $2, $3)',
+            [customerId, 'open', requiresAdminAttention]
           );
         } else {
           convStatus = convRows[0].status;
           await pool.query(
-            'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE customer_id = $1',
-            [customerId]
+            'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP, requires_admin_attention = $2 WHERE customer_id = $1',
+            [customerId, requiresAdminAttention]
           );
         }
 
@@ -113,6 +126,8 @@ export const handleIncomingMessage = async (req, res) => {
 
         if (autoReplyEnabled && convStatus !== 'handover') {
           let replyText = null;
+          let intent = null;
+          let isImportant = false;
 
           // 5.1 Check Custom Auto Reply Rules First
           const { rows: rules } = await pool.query('SELECT keyword, reply_text FROM auto_reply_rules WHERE is_active = true');
@@ -125,7 +140,14 @@ export const handleIncomingMessage = async (req, res) => {
 
           // 5.2 Generate AI Reply if no rule matched
           if (!replyText) {
-             replyText = await generateAiReply(customerId, msgText);
+             const aiResponse = await generateAiReply(customerId, msgText);
+             replyText = aiResponse.reply_text;
+             intent = aiResponse.intent;
+             isImportant = aiResponse.is_important;
+             
+             if (intent) {
+               await pool.query('UPDATE customers SET intent = $1, is_important = $2 WHERE id = $3', [intent, isImportant, customerId]);
+             }
           }
 
           if (replyText) {

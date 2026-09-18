@@ -5,9 +5,17 @@ import crypto from 'crypto';
 export const getConversations = async (req, res) => {
   try {
     const { rows: rows } = await pool.query(`
-      SELECT c.*, cust.name as customer_name, cust.phone as customer_phone 
+      SELECT 
+        c.*, 
+        cust.name as customer_name, 
+        cust.phone as customer_phone,
+        cust.intent,
+        cust.is_important,
+        cust.assigned_bde_id,
+        e.name as assigned_bde_name
       FROM conversations c
       JOIN customers cust ON c.customer_id = cust.id
+      LEFT JOIN employees e ON cust.assigned_bde_id = e.id
       ORDER BY c.updated_at DESC
     `);
     res.json(rows);
