@@ -15,6 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Trust proxy for production reverse proxy (Nginx / Cloudflare)
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(express.json({
   verify: (req, res, buf) => {
@@ -23,8 +26,14 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// API and Webhook routes
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// API and Webhook routes (Mount both /api/webhook and /webhook for flexible integration)
 app.use('/api/webhook', webhookRoutes);
+app.use('/webhook', webhookRoutes);
 app.use('/api', apiRoutes);
 
 // In production, serve the built React frontend from dist/

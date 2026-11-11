@@ -7,7 +7,11 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.warn('GEMINI_API_KEY is not configured. Falling back to default message.');
-      return { reply_text: 'I am currently unable to process your request as my AI is not fully configured.', intent: 'General', is_important: false };
+      return {
+        reply_text: 'Thank you for your message. Our team has received your enquiry and will respond shortly.',
+        intent: 'General',
+        is_important: false
+      };
     }
 
     // 1. Fetch recent conversation history for context
@@ -23,25 +27,33 @@ export const generateAiReply = async (customerId, incomingMessage) => {
     });
 
     // 2. Fetch available products from DB for context
-    const { rows: products } = await pool.query('SELECT name, category, description, price, moq, availability, shippingInfo FROM products');
-    
+    const { rows: products } = await pool.query(
+      'SELECT name, category, description, price, moq, availability, shippinginfo as "shippingInfo" FROM products'
+    );
+
     let productContext = 'Available Products:\n';
     if (products.length === 0) {
-      productContext += 'No products available currently.\n';
+      productContext += 'No products listed currently. Offer human support for details.\n';
     } else {
       products.forEach(p => {
         productContext += `- Name: ${p.name}\n  Category: ${p.category}\n  Price: ${p.price}\n  Description: ${p.description}\n  MOQ: ${p.moq}\n  Availability: ${p.availability}\n  Shipping Info: ${p.shippingInfo}\n\n`;
       });
     }
 
-    // 3. Fetch Bot Settings (e.g. Business Name, Fallback message)
+    // 3. Fetch Bot Settings
     const { rows: settings } = await pool.query('SELECT setting_key, setting_value FROM bot_settings');
     let botContext = '';
-    
-    const aiModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value || 'gemini-1.5-flash';
+
+    let aiModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value;
+    if (!aiModel || aiModel.includes('1.5') || aiModel.includes('2.0') || aiModel.includes('2.5')) {
+      // Use verified fast model
+      aiModel = 'gemini-3.5-flash-lite';
+    }
+
     const responseStyle = settings.find(s => s.setting_key === 'ai_response_style')?.setting_value || 'Professional';
-    const systemPromptBase = settings.find(s => s.setting_key === 'ai_system_prompt')?.setting_value || 'You are a helpful and polite WhatsApp customer support AI for a business. Your goal is to answer customer questions accurately based ONLY on the provided context below.';
-    
+    const systemPromptBase = settings.find(s => s.setting_key === 'ai_system_prompt')?.setting_value ||
+      'You are a helpful and polite WhatsApp customer support AI for Shastika Global Impex. Your goal is to answer customer questions accurately based ONLY on the provided context below.';
+
     settings.forEach(s => {
       if (!s.setting_key.startsWith('ai_')) {
         botContext += `${s.setting_key}: ${s.setting_value}\n`;
@@ -62,8 +74,8 @@ ${productContext}
 RULES:
 1. ONLY offer products listed in the PRODUCT INFORMATION section.
 2. If a customer asks for a product not in the list, politely inform them it is unavailable and offer human assistance.
-3. Keep answers extremely concise and friendly, suitable for WhatsApp.
-4. Do not hallucinate prices or details not in the database.
+3. Keep answers concise, polite, and friendly, suitable for WhatsApp messaging.
+4. Do not invent or hallucinate prices or details not in the database.
 
 LANGUAGE REQUIREMENT (CRITICAL):
 Detect the language used by the customer message and respond in the EXACT same language. 
@@ -78,7 +90,7 @@ CONVERSATION HISTORY:
 ${historyText}
 
 OUTPUT FORMAT:
-You MUST output exactly and ONLY a JSON object with the following structure. Do not use markdown code blocks.
+You MUST output exactly and ONLY a valid JSON object with the following structure. Do not use markdown code blocks or additional text.
 {
   "intent": "string (One of: Order, Product Enquiry, Price Enquiry, Quotation, Complaint, Follow-up, General)",
   "is_important": "boolean (true if intent is Order, Quotation, or Complaint, false otherwise)",
@@ -87,56 +99,49 @@ You MUST output exactly and ONLY a JSON object with the following structure. Do 
 
 Current Customer Message: ${incomingMessage}`;
 
-    console.log("=== DEBUG SYSTEM PROMPT ===");
-    console.log(systemPrompt);
-    console.log("===========================");
-
-    // 5. Call Gemini REST API (gemini-3.6-flash for latest API key compatibility)
+    // 5. Call Gemini REST API with timeout
     url = `https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent`;
-    
+
     const response = await axios.post(url, {
       contents: [{
         parts: [{ text: systemPrompt }]
       }]
     }, {
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': apiKey
-      }
+      },
+      timeout: 12000
     });
 
     const rawReply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    console.log("=== AI RAW OUTPUT ===");
-    console.log(rawReply);
-    console.log("===========================");
-    
-    if (!rawReply) throw new Error("Empty response from AI");
-    
+
+    if (!rawReply) throw new Error('Empty response from AI service');
+
     // Clean up potential markdown formatting (```json ... ```)
     let jsonStr = rawReply.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
+
     try {
       const parsed = JSON.parse(jsonStr);
       return {
-        reply_text: parsed.reply_text || "Sorry, I didn't understand.",
+        reply_text: parsed.reply_text || "Thank you for contacting Shastika Global Impex! How can we assist you today?",
         intent: parsed.intent || "General",
         is_important: !!parsed.is_important
       };
     } catch (e) {
-      console.warn("Failed to parse JSON from AI, returning raw text", jsonStr);
+      console.warn('AI returned non-JSON text, extracting plain reply:', jsonStr);
       return {
-        reply_text: jsonStr,
+        reply_text: jsonStr.replace(/^[{\s\S]*"reply_text":\s*"([^"]+)"[\s\S]*$/, '$1') || jsonStr,
         intent: "General",
         is_important: false
       };
     }
   } catch (error) {
-    console.error('=== AI Generation Error ===');
-    console.error('HTTP Status:', error.response?.status);
-    console.error('Endpoint/Model:', url);
-    console.error('Response Data:', JSON.stringify(error.response?.data, null, 2));
-    console.error('Message:', error.message);
-    console.error('===========================');
-    return { reply_text: 'I am sorry, I am experiencing technical difficulties right now.', intent: 'General', is_important: false };
+    console.error(`[AI Error] Model: ${url}, Status: ${error.response?.status || 'N/A'}: ${error.response?.data?.error?.message || error.message}`);
+    return {
+      reply_text: 'Thank you for reaching out to Shastika Global Impex. Our team has received your message and will assist you shortly.',
+      intent: 'General',
+      is_important: false
+    };
   }
 };

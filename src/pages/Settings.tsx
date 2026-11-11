@@ -51,8 +51,12 @@ export default function Settings() {
     return <div className="p-8 text-center text-slate-500">Loading settings...</div>;
   }
 
-  // Webhook URL derived from current origin (fallback)
-  const webhookUrl = `${window.location.protocol}//${window.location.hostname}:3000/api/whatsapp/webhook`;
+  // Webhook URL derived from current origin (canonical endpoint)
+  const webhookUrl = typeof window !== 'undefined'
+    ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? `${window.location.protocol}//${window.location.hostname}:3000/api/webhook/whatsapp`
+        : `${window.location.origin}/api/webhook/whatsapp`)
+    : 'https://shastikachatbot.co.in/api/webhook/whatsapp';
 
   return (
     <div className="w-full max-w-7xl mx-auto pb-12">

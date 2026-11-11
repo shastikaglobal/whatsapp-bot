@@ -106,9 +106,16 @@ export default function WhatsAppSettings() {
         message: 'Are you sure you want to delete this WhatsApp connection? This action cannot be undone.',
         confirmText: 'Delete',
         isDestructive: true,
-        onConfirm: () => {
-          setConnections(prev => prev.filter(conn => conn.id !== id));
-          showToast('Connection removed from view', 'success');
+        onConfirm: async () => {
+          try {
+            await api.delete(`/whatsapp/config/${id}`);
+            setConnections(prev => prev.filter(conn => conn.id !== id));
+            showToast('Connection deleted successfully', 'success');
+          } catch (err: any) {
+            showToast(err.response?.data?.error || 'Failed to delete connection', 'error');
+          } finally {
+            setConfirmConfig(null);
+          }
         }
       });
   };
@@ -181,7 +188,11 @@ export default function WhatsAppSettings() {
     return <div className="p-8 text-center text-slate-500">Loading WhatsApp configurations...</div>;
   }
 
-  const webhookUrl = `${window.location.protocol}//${window.location.hostname}:3000/webhook`;
+  const webhookUrl = typeof window !== 'undefined'
+    ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? `${window.location.protocol}//${window.location.hostname}:3000/api/webhook/whatsapp`
+        : `${window.location.origin}/api/webhook/whatsapp`)
+    : 'https://shastikachatbot.co.in/api/webhook/whatsapp';
 
   return (
     <div className="w-full max-w-7xl mx-auto pb-12">

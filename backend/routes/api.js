@@ -9,6 +9,7 @@ import * as analyticsController from '../controllers/analyticsController.js';
 import * as systemController from '../controllers/systemController.js';
 import * as whatsappController from '../controllers/whatsappController.js';
 import * as employeeController from '../controllers/employeeController.js';
+import * as webhookController from '../controllers/webhookController.js';
 import { authenticate, authorizeAdmin } from '../authMiddleware.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -16,11 +17,39 @@ import pool from '../config/db.js';
 
 const router = express.Router();
 
-router.post('/login', async (req, res) => {
+// In-Memory Login Rate Limiter (10 attempts per 15 minutes per IP)
+const loginAttempts = new Map();
+const loginRateLimiter = (req, res, next) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const maxAttempts = 10;
+
+  const record = loginAttempts.get(ip) || { count: 0, firstAttempt: now };
+  if (now - record.firstAttempt > windowMs) {
+    record.count = 1;
+    record.firstAttempt = now;
+  } else {
+    record.count += 1;
+  }
+  loginAttempts.set(ip, record);
+
+  if (record.count > maxAttempts) {
+    return res.status(429).json({ error: 'Too many login attempts. Please try again after 15 minutes.' });
+  }
+  next();
+};
+
+// 1. Public Authentication Route
+router.post('/login', loginRateLimiter, async (req, res) => {
   const { username, password } = req.body || {};
 
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+
   try {
-    const { rows } = await pool.query('SELECT * FROM employees WHERE username = $1', [username]);
+    const { rows } = await pool.query('SELECT * FROM employees WHERE username = $1', [username.trim()]);
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -37,19 +66,25 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, name: user.name },
-      process.env.JWT_SECRET || 'fallback_secret',
+      process.env.JWT_SECRET || 'shastika_default_jwt_secret_2025',
       { expiresIn: '24h' }
     );
 
-    console.log(`User login successful: ${username} (${user.role})`);
+    console.log(`[Auth] User login successful: ${username} (${user.role})`);
     res.json({ token, role: user.role, name: user.name });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('[Auth Error]:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Protect all routes below this middleware
+// 2. Public WhatsApp Webhook Alternative Endpoints (Mounted under /api)
+router.get('/whatsapp/webhook', webhookController.verifyWebhook);
+router.post('/whatsapp/webhook', webhookController.handleIncomingMessage);
+
+// ============================================
+// Protected API Routes (Token Authentication Required)
+// ============================================
 router.use(authenticate);
 
 // Employees (Admin Only)
