@@ -524,61 +524,8 @@ export const handleIncomingMessage = async (req, res) => {
       let intent = null;
       let isImportant = false;
 
-      // 4.1 Holiday Check: If today is an active holiday
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const { rows: holidayRows } = await pool.query(
-          'SELECT name FROM holidays WHERE date = $1 AND enabled = true',
-          [todayStr]
-        );
-        if (holidayRows.length > 0) {
-          const { rows: holidaySetting } = await pool.query(
-            "SELECT setting_value FROM bot_settings WHERE setting_key = 'holiday_reply'"
-          );
-          if (holidaySetting.length > 0 && holidaySetting[0].setting_value?.trim()) {
-            replyText = holidaySetting[0].setting_value.trim();
-            console.log(`[Webhook] Active holiday today ("${holidayRows[0].name}"). Using holiday auto-reply.`);
-          }
-        }
-      } catch (holidayErr) {
-        console.error('[Webhook Holiday Check Error]:', holidayErr.message);
-      }
-
-      // 4.2 Check 24-Hour Conversation Window
-      const { rows: priorMsgRows } = await pool.query(
-        `SELECT id FROM messages 
-         WHERE customer_id = $1 
-           AND id != $2 
-           AND timestamp >= NOW() - INTERVAL '24 hours' 
-         LIMIT 1`,
-        [customerId, msgId]
-      );
-      const isNewConversation = priorMsgRows.length === 0;
-      const isPureGreeting = PURE_GREETING_REGEX.test(msgText.trim());
-
-      // 4.3 Welcome Message Check:
-      // Send Welcome Message ONLY for a pure greeting (hi/hello/hii) or the first message of a new conversation that is greeting-oriented.
-      // Never use welcome message as a fallback for unmatched messages.
-      if (!replyText && isPureGreeting) {
-        const { rows: welcomeSetting } = await pool.query(
-          "SELECT setting_value FROM bot_settings WHERE setting_key = 'welcome_message'"
-        );
-        replyText = welcomeSetting[0]?.setting_value?.trim() ||
-          '👋 Welcome to Shastika Global Impex! Thank you for reaching out. How may we assist you today?';
-        console.log(`[Webhook] Pure greeting received ("${msgText}"). Sending welcome message.`);
-      }
-
-      // 4.4 Natural Acknowledgement & Gratitude Check
-      if (!replyText && ACKNOWLEDGEMENT_REGEX.test(msgText.trim())) {
-        replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
-        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation.`);
-      } else if (!replyText && THANKS_REGEX.test(msgText.trim())) {
-        replyText = "You're welcome! Feel free to reach out anytime. 👍";
-        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply.`);
-      }
-
-      // 4.5 Human Handover Request Check (Fast regex before keyword rules and AI)
-      if (!replyText && HUMAN_HANDOVER_REGEX.test(msgText.trim())) {
+      // 4.1 Fast Human Handover Request Check (Highest priority - customer needs person/BDE)
+      if (HUMAN_HANDOVER_REGEX.test(msgText.trim())) {
         replyText = getHandoverReplyText(msgText);
         intent = 'Human Request';
         isImportant = true;
@@ -601,6 +548,61 @@ export const handleIncomingMessage = async (req, res) => {
         notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token, assignedBde).catch(e => {
           console.warn('[Webhook] Error calling notifyAdminHandover:', e.message);
         });
+      }
+
+      // 4.2 Holiday Check: If today is an active holiday
+      if (!replyText) {
+        try {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const { rows: holidayRows } = await pool.query(
+            'SELECT name FROM holidays WHERE date = $1 AND enabled = true',
+            [todayStr]
+          );
+          if (holidayRows.length > 0) {
+            const { rows: holidaySetting } = await pool.query(
+              "SELECT setting_value FROM bot_settings WHERE setting_key = 'holiday_reply'"
+            );
+            if (holidaySetting.length > 0 && holidaySetting[0].setting_value?.trim()) {
+              replyText = holidaySetting[0].setting_value.trim();
+              console.log(`[Webhook] Active holiday today ("${holidayRows[0].name}"). Using holiday auto-reply.`);
+            }
+          }
+        } catch (holidayErr) {
+          console.error('[Webhook Holiday Check Error]:', holidayErr.message);
+        }
+      }
+
+      // 4.3 Check 24-Hour Conversation Window
+      const { rows: priorMsgRows } = await pool.query(
+        `SELECT id FROM messages 
+         WHERE customer_id = $1 
+           AND id != $2 
+           AND timestamp >= NOW() - INTERVAL '24 hours' 
+         LIMIT 1`,
+        [customerId, msgId]
+      );
+      const isNewConversation = priorMsgRows.length === 0;
+      const isPureGreeting = PURE_GREETING_REGEX.test(msgText.trim());
+
+      // 4.4 Welcome Message Check:
+      // Send Welcome Message ONLY for a pure greeting (hi/hello/hii) or the first message of a new conversation that is greeting-oriented.
+      // Never use welcome message as a fallback for unmatched messages.
+      if (!replyText && isPureGreeting) {
+        const { rows: welcomeSetting } = await pool.query(
+          "SELECT setting_value FROM bot_settings WHERE setting_key = 'welcome_message'"
+        );
+        replyText = welcomeSetting[0]?.setting_value?.trim() ||
+          '👋 Welcome to Shastika Global Impex! Thank you for reaching out. How may we assist you today?';
+        console.log(`[Webhook] Pure greeting received ("${msgText}"). Sending welcome message.`);
+      }
+
+      // 4.5 Natural Acknowledgement & Gratitude Check
+      if (!replyText && ACKNOWLEDGEMENT_REGEX.test(msgText.trim())) {
+        replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
+        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation.`);
+      } else if (!replyText && THANKS_REGEX.test(msgText.trim())) {
+        replyText = "You're welcome! Feel free to reach out anytime. 👍";
+        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply.`);
       }
 
       // 4.6 RFQ / Detailed Quotation Enquiry Check
