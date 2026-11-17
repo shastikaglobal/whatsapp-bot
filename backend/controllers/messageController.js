@@ -188,9 +188,13 @@ export const toggleTakeover = async (req, res) => {
       return res.status(400).json({ error: 'Customer ID and status are required' });
     }
 
+    // When resuming bot ('open') or marking 'resolved', clear requires_admin_attention
+    // When activating takeover ('handover'), flag requires_admin_attention
+    const requiresAttention = status === 'handover';
+
     await pool.query(
-      'UPDATE conversations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE customer_id = $2',
-      [status, customerId]
+      'UPDATE conversations SET status = $1, requires_admin_attention = $2, updated_at = CURRENT_TIMESTAMP WHERE customer_id = $3',
+      [status, requiresAttention, customerId]
     );
     res.json({ success: true, status });
   } catch (error) {

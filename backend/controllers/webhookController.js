@@ -10,6 +10,123 @@ export const PURE_GREETING_REGEX = /^(hi+|hello+|hey+|hlo+|vanakkam|namaste|good
 export const ACKNOWLEDGEMENT_REGEX = /^(ok+|okay|k|noted|sure|alright|fine|சரி)[\s.!]*$/i;
 export const THANKS_REGEX = /^(thanks+|thank\s+you|thx|tq|நன்றி)[\s.!]*$/i;
 
+// Human handover regex for English, Tamil, and Tanglish phrases
+export const HUMAN_HANDOVER_REGEX = new RegExp(
+  [
+    // English phrases
+    '\\b(?:is\\s+there\\s+)?anyone\\s+else\\b',
+    '\\bconnect\\s+(?:me\\s+)?(?:with|to)?\\s*(?:your\\s+)?(?:bde(?:\\s+members?)?|sales(?:\\s+team)?|manager|employee|person|human|agent)\\b',
+    '\\b(?:talk|speak)\\s+(?:to|with)\\s+(?:a\\s+|an\\s+|your\\s+)?(?:human|person|bde|employee|sales(?:\\s+team|\\s+person)?|manager|someone|anybody|agent)\\b',
+    '\\b(?:call|phone)\\s+me\\b',
+    '\\bgive\\s+me\\s+a\\s+call\\b',
+    '\\bwant\\s+(?:to\\s+)?(?:a\\s+)?call\\b',
+    '\\bcan\\s+you\\s+call\\b',
+    '\\b(?:real\\s+|actual\\s+)(?:human|person)\\b',
+    '\\b(?:human|customer)\\s+(?:agent|support|care|representative|handover|help)\\b',
+    '\\bspeak\\s+to\\s+a\\s+person\\b',
+    '\\btalk\\s+to\\s+a\\s+person\\b',
+    '\\bconnect\\s+with\\s+bde\\b',
+    '\\bconnect\\s+bde\\b',
+
+    // Tamil phrases (Unicode)
+    '(?:வேற(?:தாவது|யாராவது)?\\s*யாராவது|வேற\\s*யாராவது)',
+    '(?:மனிதரிடம்|மனிதர்\\s*கிட்ட|ஆள்\\s*கிட்ட|ஊழியரிடம்|மேனேஜரிடம்|விற்பனை\\s*குழுவிடம்)\\s*(?:பேச|தொடர்பு)',
+    '(?:கால்|போன்)\\s*பண்ணுங்க',
+    '(?:மனிதர்|ஆள்)\\s*இருக்காங்களா',
+
+    // Tanglish phrases
+    '\\b(?:ya+ra+vathu|ya+rum)\\s+(?:iruka+ngala|illaya)\\b',
+    '\\bvera\\s+(?:ya+ra+vathu|ya+rum)\\b',
+    '\\bbde\\s*(?:members?|kooda|kitta|oda)\\b',
+    '\\b(?:sales\\s*team|manager|employee|human|bde)\\s*(?:kitta|kooda|oda)\\s*(?:pesa|connect)\\b',
+    '\\b(?:call|phone)\\s*(?:pan+un?ga|panna\\s+mudiyuma)\\b',
+    '\\bconnect\\s+panna\\s+mudiyuma\\b'
+  ].join('|'),
+  'iu'
+);
+
+/**
+ * Returns a polite, honest handover acknowledgement in the customer's language.
+ */
+export function getHandoverReplyText(msgText) {
+  const text = msgText || '';
+  if (/[\u0B80-\u0BFF]/.test(text)) {
+    return 'நிச்சயமாக, உங்கள் கோரிக்கையை எங்கள் விற்பனைக் குழுவிற்கு (BDE) அனுப்பியுள்ளேன். அவர்கள் விரைவில் உங்களைத் தொடர்பு கொள்வார்கள். அதற்குள் உங்கள் பெயர், தேவையான பொருள் மற்றும் அளவைத் தெரிவிக்க முடியுமா? 🤝';
+  }
+  if (/(?:kooda|kitta|panunga|pannunga|mudiyuma|pesa|pesanum|irukangala|enga|unga|solla|illaya|yaara?vathu)/i.test(text)) {
+    return 'Sure, unga request ah engaloda sales team-ku (BDE) forward pannirukken. Seekiram ungalai contact pannuvanga. Meanwhile unga name, required product and quantity solla mudiyuma? 🤝';
+  }
+  return 'Sure, I am passing your request to our sales team (BDE). They will contact you shortly. Meanwhile, may I have your name, product, and quantity so they can assist you faster? 🤝';
+}
+
+/**
+ * Dispatches WhatsApp handover alert to admin/BDE phone numbers configured in bot_settings.
+ * Fails gracefully (logs warning) if outside the 24-hour Meta messaging window.
+ */
+export async function notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, accessToken) {
+  try {
+    const { rows: settingRows } = await pool.query(
+      "SELECT setting_value FROM bot_settings WHERE setting_key = 'handover_notify_numbers'"
+    );
+    const notifyStr = settingRows[0]?.setting_value?.trim();
+    if (!notifyStr) {
+      console.log('[Handover Notification] No handover_notify_numbers configured in bot_settings. In-app badge active.');
+      return;
+    }
+
+    const numbers = notifyStr
+      .split(/[,\s;\n]+/)
+      .map(n => n.replace(/[^0-9]/g, ''))
+      .filter(n => n.length >= 10);
+
+    if (numbers.length === 0) {
+      return;
+    }
+
+    // Fetch last 3 messages for context
+    const { rows: last3 } = await pool.query(
+      `SELECT sender, content, timestamp FROM messages 
+       WHERE customer_id = $1 
+       ORDER BY timestamp DESC LIMIT 3`,
+      [customerId]
+    );
+
+    const recentFormatted = last3.reverse().map(m => {
+      const tag = m.sender === 'ai' ? '🤖 Bot' : (m.sender === 'human' ? '👤 BDE' : '💬 Customer');
+      return `${tag}: ${m.content}`;
+    }).join('\n');
+
+    const alertMessage = 
+`🚨 *Handover Alert - Shastika Global Impex*
+Customer requested human / BDE assistance.
+
+*Name:* ${senderName || 'Customer'}
+*Phone:* +${senderPhone}
+
+*Recent Conversation:*
+${recentFormatted || 'No prior messages'}
+
+👉 Open Inbox to respond:
+https://shastikachatbot.co.in/inbox`;
+
+    for (const targetNum of numbers) {
+      try {
+        console.log(`[Handover Notification] Sending WhatsApp alert to admin ${targetNum}...`);
+        const sendRes = await sendWhatsAppMessage(targetNum, alertMessage, receivingPhoneNumberId, accessToken);
+        if (!sendRes || sendRes.error) {
+          console.warn(`[Handover Notification] WhatsApp alert to ${targetNum} failed (outside 24h window requires approved template):`, sendRes?.message || sendRes?.error);
+        } else {
+          console.log(`[Handover Notification] WhatsApp alert successfully dispatched to ${targetNum}`);
+        }
+      } catch (sendErr) {
+        console.warn(`[Handover Notification] Failed to notify ${targetNum}:`, sendErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Handover Notification] Error in notifyAdminHandover:', err.message);
+  }
+}
+
 /**
  * Builds a regex with word boundaries, plurals, and common typos.
  * Supports Unicode boundaries for multilingual matching.
@@ -405,12 +522,35 @@ export const handleIncomingMessage = async (req, res) => {
         console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply.`);
       }
 
-      // 4.5 RFQ / Detailed Quotation Enquiry Check
+      // 4.5 Human Handover Request Check (Fast regex before keyword rules and AI)
+      if (!replyText && HUMAN_HANDOVER_REGEX.test(msgText.trim())) {
+        replyText = getHandoverReplyText(msgText);
+        intent = 'Human Request';
+        isImportant = true;
+
+        console.log(`[Webhook] Fast regex human handover requested by customer ${customerId} ("${msgText}"). Activating handover mode.`);
+
+        await pool.query(
+          'UPDATE conversations SET status = $1, requires_admin_attention = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          ['handover', convId]
+        );
+        await pool.query(
+          'UPDATE customers SET intent = $1, is_important = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [intent, customerId]
+        );
+
+        // Notify Admin / BDE via WhatsApp
+        notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token).catch(e => {
+          console.warn('[Webhook] Error calling notifyAdminHandover:', e.message);
+        });
+      }
+
+      // 4.6 RFQ / Detailed Quotation Enquiry Check
       // If customer provides order volume or quotation terms (e.g. tons, CIF, FOB, quote),
       // route to Gemini AI to capture parameters and initiate quotation handover (is_important = true).
       const isDetailedRfq = /(?:quotation|quote|\bcif\b|\bfob\b|\b(?:metric\s+)?tons?\b|\b(?:40ft|20ft|fcl)\b)/i.test(msgText);
 
-      // 4.6 Keyword Rules Check:
+      // 4.7 Keyword Rules Check:
       // Matches case-insensitive contains with word boundaries, plurals (s/es), and common typos.
       // If multiple products match, answers for the product the customer mentioned last.
       if (!replyText && !isDetailedRfq) {
@@ -424,7 +564,7 @@ export const handleIncomingMessage = async (req, res) => {
         }
       }
 
-      // 4.7 Gemini AI Fallback for RFQs and Unmatched Messages (NEVER welcome message)
+      // 4.8 Gemini AI Fallback for RFQs and Unmatched Messages (NEVER welcome message)
       if (!replyText) {
         console.log(`[Webhook] Unmatched / RFQ message: "${msgText}". Routing to Gemini AI service...`);
         const aiResponse = await generateAiReply(customerId, msgText);
@@ -432,17 +572,32 @@ export const handleIncomingMessage = async (req, res) => {
         intent = aiResponse.intent;
         isImportant = aiResponse.is_important;
 
-        if (intent) {
+        if (intent === 'Human Request') {
+          console.log(`[Webhook] Gemini AI classified message as Human Request for customer ${customerId}. Activating handover.`);
           await pool.query(
-            'UPDATE customers SET intent = $1, is_important = $2 WHERE id = $3',
-            [intent, isImportant, customerId]
+            'UPDATE conversations SET status = $1, requires_admin_attention = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            ['handover', convId]
           );
-        }
-        if (isImportant) {
           await pool.query(
-            'UPDATE conversations SET requires_admin_attention = true WHERE id = $1',
-            [convId]
+            'UPDATE customers SET intent = $1, is_important = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            ['Human Request', customerId]
           );
+          notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token).catch(e => {
+            console.warn('[Webhook] Error calling notifyAdminHandover:', e.message);
+          });
+        } else {
+          if (intent) {
+            await pool.query(
+              'UPDATE customers SET intent = $1, is_important = $2 WHERE id = $3',
+              [intent, isImportant, customerId]
+            );
+          }
+          if (isImportant) {
+            await pool.query(
+              'UPDATE conversations SET requires_admin_attention = true WHERE id = $1',
+              [convId]
+            );
+          }
         }
       }
 

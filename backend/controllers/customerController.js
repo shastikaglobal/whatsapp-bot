@@ -3,9 +3,17 @@ import pool from '../config/db.js';
 export const getCustomers = async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT c.*, c.lastmessage as "lastMessage", e.name as assigned_bde_name
+      SELECT c.*, c.lastmessage as "lastMessage", e.name as assigned_bde_name,
+             conv.status as conv_status, conv.requires_admin_attention as conv_requires_attention
       FROM customers c
       LEFT JOIN employees e ON c.assigned_bde_id = e.id
+      LEFT JOIN LATERAL (
+        SELECT status, requires_admin_attention
+        FROM conversations
+        WHERE customer_id = c.id
+        ORDER BY updated_at DESC
+        LIMIT 1
+      ) conv ON true
       ORDER BY c.created_at DESC
     `);
     res.json(rows);

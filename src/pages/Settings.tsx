@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, ShieldCheck, Zap, Globe, MessageSquare, Bot, AlertCircle } from 'lucide-react';
+import { Save, ShieldCheck, Zap, Globe, MessageSquare, Bot, AlertCircle, UserCheck } from 'lucide-react';
 import api from '../api/axios';
 
 export default function Settings() {
@@ -172,6 +172,46 @@ export default function Settings() {
               placeholder="e.g. You are a helpful sales assistant for our clothing brand..."
               className="w-full h-32 p-3 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
             />
+          </div>
+        </div>
+
+        {/* Human Handover & Escalation */}
+        <div className="panel-card flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-2">
+            <UserCheck className="w-5 h-5 text-rose-500" />
+            <h3 className="font-bold text-slate-800">Human Handover & Escalation</h3>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-slate-700 block">Global Bot Auto-Reply</label>
+              <span className="text-xs text-slate-400">Master switch for automated bot replies</span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="sr-only peer" 
+                checked={settings.auto_reply_enabled !== 'false'} 
+                onChange={(e) => handleChange('auto_reply_enabled', e.target.checked ? 'true' : 'false')} 
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+              Admin & BDE Alert Numbers
+            </label>
+            <input 
+              type="text" 
+              value={settings.handover_notify_numbers || ''} 
+              onChange={(e) => handleChange('handover_notify_numbers', e.target.value)} 
+              placeholder="e.g. 919789090920, 919876543210" 
+              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 font-mono" 
+            />
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Comma-separated WhatsApp phone numbers with country code. When a customer asks for a human, BDE, manager, or call, an instant WhatsApp alert with customer name, phone, and last 3 messages is dispatched to these numbers.
+            </p>
           </div>
         </div>
 

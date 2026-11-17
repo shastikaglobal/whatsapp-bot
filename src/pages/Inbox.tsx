@@ -30,6 +30,7 @@ export default function Inbox() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'needs_human' | 'bot_active' | 'resolved'>('all');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [bdes, setBdes] = useState<{id: string, name: string}[]>([]);
@@ -104,6 +105,16 @@ export default function Inbox() {
     const tempMsg = inputMessage;
     setInputMessage('');
 
+    // If bot was active, sending a manual reply automatically switches to handover (pauses bot)
+    if (selectedConvo.status === 'open') {
+      try {
+        await api.put('/whatsapp/takeover', { customerId: selectedConvo.customer_id, status: 'handover' });
+        setSelectedConvo(prev => prev ? { ...prev, status: 'handover' } : null);
+      } catch (e) {
+        console.warn('Could not auto-takeover conversation:', e);
+      }
+    }
+
     // Optimistic UI update
     const newMsg: Message = {
       id: Date.now().toString(),
@@ -118,6 +129,7 @@ export default function Inbox() {
     try {
       await api.post('/whatsapp/send', { customerId: selectedConvo.customer_id, content: tempMsg });
       fetchMessages(selectedConvo.customer_id);
+      fetchConversations();
     } catch (err) {
       console.error('Failed to send', err);
     }
@@ -148,71 +160,137 @@ export default function Inbox() {
     }
   };
 
-  const filteredConversations = conversations.filter(c => 
-    c.customer_name?.toLowerCase().includes(search.toLowerCase()) || 
-    c.customer_phone?.includes(search)
-  );
+  const countNeedsHuman = conversations.filter(c => c.status === 'handover' || c.requires_admin_attention || c.intent === 'Human Request').length;
+  const countBotActive = conversations.filter(c => c.status === 'open' && !c.requires_admin_attention && c.intent !== 'Human Request').length;
+  const countResolved = conversations.filter(c => c.status === 'resolved').length;
+
+  const filteredConversations = conversations.filter(c => {
+    const matchesSearch = 
+      c.customer_name?.toLowerCase().includes(search.toLowerCase()) || 
+      c.customer_phone?.includes(search);
+    if (!matchesSearch) return false;
+
+    if (filter === 'needs_human') {
+      return c.status === 'handover' || c.requires_admin_attention || c.intent === 'Human Request';
+    }
+    if (filter === 'bot_active') {
+      return c.status === 'open' && !c.requires_admin_attention && c.intent !== 'Human Request';
+    }
+    if (filter === 'resolved') {
+      return c.status === 'resolved';
+    }
+    return true;
+  });
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 h-[calc(100vh-100px)] flex overflow-hidden">
       
       {/* Sidebar: Conversation List */}
-      <div className="w-80 border-r border-slate-200 flex flex-col bg-slate-50 shrink-0">
-        <div className="p-4 border-b border-slate-200">
-          <h2 className="text-lg font-bold text-slate-800 mb-4">WhatsApp Inbox</h2>
-          <div className="relative">
+      <div className="w-84 border-r border-slate-200 flex flex-col bg-slate-50 shrink-0">
+        <div className="p-4 border-b border-slate-200 bg-white">
+          <h2 className="text-lg font-bold text-slate-800 mb-3">WhatsApp Inbox</h2>
+          <div className="relative mb-3">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text" 
               placeholder="Search customers..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${
+                filter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All ({conversations.length})
+            </button>
+            <button
+              onClick={() => setFilter('needs_human')}
+              className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                filter === 'needs_human' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+              }`}
+            >
+              🚨 Needs Human {countNeedsHuman > 0 && `(${countNeedsHuman})`}
+            </button>
+            <button
+              onClick={() => setFilter('bot_active')}
+              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+                filter === 'bot_active' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              🤖 Bot ({countBotActive})
+            </button>
+            <button
+              onClick={() => setFilter('resolved')}
+              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${
+                filter === 'resolved' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Resolved ({countResolved})
+            </button>
           </div>
         </div>
         
         <div className="flex-1 overflow-y-auto">
-          {filteredConversations.map(convo => (
-            <div 
-              key={convo.id} 
-              onClick={() => handleSelectConvo(convo)}
-              className={`p-4 border-b border-slate-100 cursor-pointer transition-colors ${selectedConvo?.id === convo.id ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : 'hover:bg-white border-l-4 border-l-transparent'}`}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <div className="flex flex-col">
-                  <span className="font-bold text-slate-800 flex items-center gap-2">
-                    {convo.customer_name || 'Unknown User'}
-                    {convo.requires_admin_attention && <AlertCircle className="w-4 h-4 text-rose-500" />}
+          {filteredConversations.map(convo => {
+            const needsHuman = convo.status === 'handover' || convo.requires_admin_attention || convo.intent === 'Human Request';
+            return (
+              <div 
+                key={convo.id} 
+                onClick={() => handleSelectConvo(convo)}
+                className={`p-4 border-b border-slate-100 cursor-pointer transition-colors ${
+                  selectedConvo?.id === convo.id 
+                    ? 'bg-emerald-50 border-l-4 border-l-emerald-500' 
+                    : needsHuman 
+                    ? 'hover:bg-rose-50/40 border-l-4 border-l-rose-400 bg-rose-50/20' 
+                    : 'hover:bg-white border-l-4 border-l-transparent'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      {convo.customer_name || 'Unknown User'}
+                      {needsHuman && <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />}
+                    </span>
+                    {convo.intent && (
+                      <span className={`text-[10px] w-fit px-2 py-0.5 mt-1 rounded-full font-medium ${
+                        needsHuman ? 'bg-rose-100 text-rose-700 font-bold' : convo.is_important ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {convo.intent}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                    {new Date(convo.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </span>
-                  {convo.intent && (
-                    <span className={`text-[10px] w-fit px-2 py-0.5 mt-1 rounded-full font-medium ${
-                      convo.is_important ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      {convo.intent}
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-slate-500">{convo.customer_phone}</span>
+                  {needsHuman ? (
+                    <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-rose-200">
+                      <AlertCircle className="w-3 h-3 text-rose-600" /> Needs Human
+                    </span>
+                  ) : convo.status === 'resolved' ? (
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                      Resolved
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                      <Bot className="w-3 h-3" /> AI Active
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                  {new Date(convo.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </span>
               </div>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-xs text-slate-500">{convo.customer_phone}</span>
-                {convo.status === 'handover' ? (
-                  <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                    <User className="w-3 h-3" /> Human
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                    <Bot className="w-3 h-3" /> AI Active
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {filteredConversations.length === 0 && (
-            <div className="p-8 text-center text-slate-500 text-sm">No conversations found.</div>
+            <div className="p-8 text-center text-slate-500 text-sm">No conversations match this filter.</div>
           )}
         </div>
       </div>
@@ -243,16 +321,18 @@ export default function Inbox() {
               {selectedConvo.status === 'handover' ? (
                 <button 
                   onClick={() => handleTakeover('open')}
-                  className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                  className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="Resume automated bot replies"
                 >
-                  <Bot className="w-4 h-4" /> Return to AI
+                  <Bot className="w-4 h-4 text-emerald-600" /> Resume Bot
                 </button>
               ) : (
                 <button 
                   onClick={() => handleTakeover('handover')}
-                  className="px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                  className="px-3 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="Pause bot and take over manually"
                 >
-                  <User className="w-4 h-4" /> Human Takeover
+                  <User className="w-4 h-4 text-amber-700" /> Pause Bot (Take Over)
                 </button>
               )}
               <div className="relative" ref={dropdownRef}>
@@ -311,42 +391,59 @@ export default function Inbox() {
           </div>
 
           {/* Input Area */}
-          <div className="p-4 bg-[#f0f2f5] shrink-0 relative z-10">
-            {selectedConvo.status === 'open' ? (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center gap-3 text-slate-500 text-sm shadow-sm">
-                <Bot className="w-5 h-5" />
-                AI is currently handling this conversation. Take over to reply manually.
-                <button 
-                  onClick={() => handleTakeover('handover')}
-                  className="ml-2 text-amber-600 font-bold hover:underline"
+          <div className="p-4 bg-[#f0f2f5] shrink-0 relative z-10 border-t border-slate-200">
+            {selectedConvo.status === 'handover' ? (
+              <div className="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-800">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <User className="w-3.5 h-3.5 text-amber-600" />
+                  Bot paused for this customer. You are in manual reply mode.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTakeover('open')}
+                  className="font-bold text-blue-600 hover:underline flex items-center gap-1"
                 >
-                  Takeover Now
+                  <Bot className="w-3.5 h-3.5" /> Resume Bot
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-                <textarea 
-                  value={inputMessage}
-                  onChange={e => setInputMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  className="flex-1 max-h-32 min-h-[44px] bg-white rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm border-none"
-                  rows={1}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e);
-                    }
-                  }}
-                />
-                <button 
-                  type="submit"
-                  disabled={!inputMessage.trim()}
-                  className="h-[44px] w-[44px] flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white rounded-full transition-colors shrink-0 shadow-sm"
+              <div className="mb-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Bot className="w-3.5 h-3.5 text-blue-600" />
+                  AI Bot is active. Typing a reply here will pause the bot and switch to manual takeover.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTakeover('handover')}
+                  className="font-bold text-amber-700 hover:underline flex items-center gap-1"
                 >
-                  <Send className="w-4 h-4 ml-0.5" /> 
+                  <User className="w-3.5 h-3.5" /> Pause Bot Now
                 </button>
-              </form>
+              </div>
             )}
+            <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+              <textarea 
+                value={inputMessage}
+                onChange={e => setInputMessage(e.target.value)}
+                placeholder={selectedConvo.status === 'handover' ? "Type a reply as human BDE..." : "Type reply (sending will pause bot and take over)..."}
+                className="flex-1 max-h-32 min-h-[44px] bg-white rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm border border-slate-200 focus:border-emerald-500"
+                rows={1}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
+              />
+              <button 
+                type="submit"
+                disabled={!inputMessage.trim()}
+                className="h-[44px] px-4 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-medium text-sm transition-colors shrink-0 shadow-sm"
+              >
+                <Send className="w-4 h-4 ml-0.5" />
+                <span>Send</span>
+              </button>
+            </form>
           </div>
 
         </div>

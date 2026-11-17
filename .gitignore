@@ -91,3 +91,8 @@ backend/node_modules/
 
 # Portable Git (downloaded for tooling only)
 /PortableGit.exe
+
+# Database backups and dumps
+backend/backups/
+*.sql
+
