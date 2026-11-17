@@ -39,10 +39,13 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-slate-900 overflow-hidden">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+      <main className="flex-1 flex flex-col min-w-0 galaxy-main-area relative overflow-hidden">
         
-        {/* Subtle top ambient nebula glow below main bar */}
-        <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-indigo-950/20 via-slate-100/40 to-transparent pointer-events-none z-0"></div>
+        {/* Ambient Cosmic Starlight & Nebula Globs */}
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.03] pointer-events-none z-0"></div>
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none z-0"></div>
+        <div className="absolute top-1/3 -right-32 w-96 h-96 bg-emerald-500/12 rounded-full blur-3xl pointer-events-none z-0"></div>
+        <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none z-0"></div>
 
         {/* Galaxy Main Bar Header */}
         <header className="glass-nav-header flex items-center justify-between shrink-0 overflow-hidden">
