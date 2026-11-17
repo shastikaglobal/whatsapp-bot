@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, X, Trash2, Package } from 'lucide-react';
+import { Plus, X, Trash2, Package, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -19,6 +19,12 @@ export default function Products() {
   const [showModal, setShowModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -66,9 +72,11 @@ export default function Products() {
       setFormData({
         name: '', category: '', description: '', price: '', moq: '', availability: 'In Stock', shippingInfo: ''
       });
+      showToast('Product created successfully', 'success');
       fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      showToast(error.response?.data?.error || 'Failed to save product', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -78,14 +86,30 @@ export default function Products() {
     setConfirmConfig({
       title: 'Delete Product',
       message: `Are you sure you want to delete ${name}?`,
-      onConfirm: () => {
-        setProducts(prev => prev.filter(p => p.id !== id));
+      onConfirm: async () => {
+        try {
+          await api.delete(`/products/${id}`);
+          setProducts(prev => prev.filter(p => p.id !== id));
+          showToast('Product deleted successfully', 'success');
+        } catch (error: any) {
+          console.error(error);
+          showToast(error.response?.data?.error || 'Failed to delete product', 'error');
+        } finally {
+          setConfirmConfig(null);
+        }
       }
     });
   };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {toast && (
+        <div className={`toast-banner ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          {toast.message}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Product Knowledge Base</h2>

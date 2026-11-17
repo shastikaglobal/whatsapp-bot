@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Edit2, Trash2, X } from 'lucide-react';
+import { Plus, Calendar, Edit2, Trash2, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -16,6 +16,12 @@ export default function Holidays() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
   
   // Form state
   const [name, setName] = useState('');
@@ -62,6 +68,7 @@ export default function Holidays() {
           date,
           enabled: enabled ? 1 : 0
         });
+        showToast('Holiday updated successfully', 'success');
       } else {
         await api.post('/holidays', {
           id: Date.now().toString(),
@@ -69,6 +76,7 @@ export default function Holidays() {
           date,
           enabled: enabled ? 1 : 0
         });
+        showToast('Holiday created successfully', 'success');
       }
       setShowModal(false);
       setName('');
@@ -76,15 +84,23 @@ export default function Holidays() {
       setEnabled(true);
       setEditingId(null);
       fetchHolidays();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      showToast(err.response?.data?.error || 'Failed to save holiday', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto space-y-4">
+      {toast && (
+        <div className={`toast-banner ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          {toast.message}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Holiday Rules</h2>
@@ -149,8 +165,17 @@ export default function Holidays() {
                         setConfirmConfig({
                           title: 'Delete Holiday',
                           message: `Are you sure you want to delete ${h.name}?`,
-                          onConfirm: () => {
-                            setHolidays(prev => prev.filter(item => item.id !== h.id));
+                          onConfirm: async () => {
+                            try {
+                              await api.delete(`/holidays/${h.id}`);
+                              setHolidays(prev => prev.filter(item => item.id !== h.id));
+                              showToast('Holiday deleted successfully', 'success');
+                            } catch (err: any) {
+                              console.error('Failed to delete holiday:', err);
+                              showToast(err.response?.data?.error || 'Failed to delete holiday', 'error');
+                            } finally {
+                              setConfirmConfig(null);
+                            }
                           }
                         });
                       }}
