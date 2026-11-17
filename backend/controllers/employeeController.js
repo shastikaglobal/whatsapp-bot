@@ -16,7 +16,7 @@ export const getEmployees = async (req, res) => {
 export const getActiveBDEs = async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, role, status FROM employees WHERE role = 'BDE' AND status = 'Active' ORDER BY name ASC"
+      "SELECT id, name, role, status FROM employees WHERE LOWER(role) = 'bde' AND status = 'Active' ORDER BY name ASC"
     );
     res.json(rows);
   } catch (err) {
@@ -27,11 +27,15 @@ export const getActiveBDEs = async (req, res) => {
 
 export const createEmployee = async (req, res) => {
   const { name, username, password, role, status } = req.body;
+  if (!name || !username || !password) {
+    return res.status(400).json({ error: 'Name, username/email/phone, and password are required' });
+  }
+  const normalizedRole = String(role || 'BDE').toLowerCase() === 'admin' ? 'Admin' : 'BDE';
   try {
     const password_hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
       'INSERT INTO employees (name, username, password_hash, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, username, role, status',
-      [name, username, password_hash, role, status || 'Active']
+      [name, username, password_hash, normalizedRole, status || 'Active']
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -46,9 +50,10 @@ export const createEmployee = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   const { id } = req.params;
   const { name, username, password, role, status } = req.body;
+  const normalizedRole = String(role || 'BDE').toLowerCase() === 'admin' ? 'Admin' : 'BDE';
   try {
     let query = 'UPDATE employees SET name = $1, username = $2, role = $3, status = $4';
-    const params = [name, username, role, status];
+    const params = [name, username, normalizedRole, status];
     
     if (password) {
       const password_hash = await bcrypt.hash(password, 10);

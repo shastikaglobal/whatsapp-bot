@@ -86,11 +86,11 @@ export default function Employees() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Employee Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage Admins and Business Development Executives (BDEs).</p>
+          <h1 className="text-2xl font-bold text-slate-800">Employees / BDEs</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage Admins and Business Development Executives (BDE sales team).</p>
         </div>
         <button onClick={() => openModal()} className="btn-save-primary flex items-center gap-2">
-          <Plus className="w-5 h-5" /> Add Employee
+          <Plus className="w-5 h-5" /> Add BDE / Employee
         </button>
       </div>
 
@@ -167,19 +167,19 @@ export default function Employees() {
                 <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Username</label>
-                <input required type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Email / Phone / Username</label>
+                <input required type="text" placeholder="e.g. sales@shastika.com or bde_john" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Password {formData.id && '(Leave blank to keep current)'}</label>
-                <input required={!formData.id} type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Password {formData.id ? '(Leave blank to keep current)' : '(Hashed with bcrypt)'}</label>
+                <input required={!formData.id} type="password" placeholder="Set user password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Role</label>
                   <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white">
-                    <option value="BDE">BDE</option>
-                    <option value="Admin">Admin</option>
+                    <option value="BDE">BDE (Sales)</option>
+                    <option value="Admin">Admin (Full Access)</option>
                   </select>
                 </div>
                 <div>

@@ -15,6 +15,8 @@ interface Customer {
   is_important?: boolean;
   conv_status?: string;
   conv_requires_attention?: boolean;
+  assigned_bde_id?: string;
+  assigned_bde_name?: string;
 }
 
 export default function Customers() {
@@ -153,6 +155,7 @@ export default function Customers() {
               <th className="px-6 py-4">Customer</th>
               <th className="px-6 py-4">Phone</th>
               <th className="px-6 py-4">Country</th>
+              <th className="px-6 py-4">Assigned BDE</th>
               <th className="px-6 py-4">Bot / Attention Status</th>
               <th className="px-6 py-4">Account Status</th>
               <th className="px-6 py-4 text-right">Actions</th>
@@ -172,6 +175,15 @@ export default function Customers() {
                   </td>
                   <td className="px-6 py-4">{c.phone}</td>
                   <td className="px-6 py-4">{c.country || 'N/A'}</td>
+                  <td className="px-6 py-4">
+                    {c.assigned_bde_name ? (
+                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {c.assigned_bde_name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">Unassigned</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     {needsHuman ? (
                       <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 w-fit">
@@ -209,7 +221,7 @@ export default function Customers() {
             })}
             {filteredCustomers.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">No customers found.</td>
+                <td colSpan={7} className="px-6 py-8 text-center text-slate-500">No customers found.</td>
               </tr>
             )}
           </tbody>

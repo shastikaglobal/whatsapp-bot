@@ -102,37 +102,37 @@ router.get('/customers', customerController.getCustomers);
 router.get('/customers/:id', customerController.getCustomerById);
 router.post('/customers', customerController.createCustomer);
 router.put('/customers/:id', customerController.updateCustomer);
-router.put('/customers/:id/assign', customerController.assignBDE);
-router.delete('/customers/:id', customerController.deleteCustomer);
+router.put('/customers/:id/assign', authorizeAdmin, customerController.assignBDE);
+router.delete('/customers/:id', authorizeAdmin, customerController.deleteCustomer);
 
 // Products
 router.get('/products', productController.getProducts);
 router.get('/products/:id', productController.getProductById);
-router.post('/products', productController.createProduct);
-router.put('/products/:id', productController.updateProduct);
-router.delete('/products/:id', productController.deleteProduct);
+router.post('/products', authorizeAdmin, productController.createProduct);
+router.put('/products/:id', authorizeAdmin, productController.updateProduct);
+router.delete('/products/:id', authorizeAdmin, productController.deleteProduct);
 
 // Holidays
 router.get('/holidays', holidayController.getHolidays);
-router.post('/holidays', holidayController.createHoliday);
-router.put('/holidays/:id', holidayController.updateHoliday);
-router.delete('/holidays/:id', holidayController.deleteHoliday);
+router.post('/holidays', authorizeAdmin, holidayController.createHoliday);
+router.put('/holidays/:id', authorizeAdmin, holidayController.updateHoliday);
+router.delete('/holidays/:id', authorizeAdmin, holidayController.deleteHoliday);
 
 // Auto Reply Rules
 router.get('/auto-reply/rules', ruleController.getRules);
-router.post('/auto-reply/rules', ruleController.createRule);
-router.put('/auto-reply/rules/:id', ruleController.updateRule);
-router.delete('/auto-reply/rules/:id', ruleController.deleteRule);
+router.post('/auto-reply/rules', authorizeAdmin, ruleController.createRule);
+router.put('/auto-reply/rules/:id', authorizeAdmin, ruleController.updateRule);
+router.delete('/auto-reply/rules/:id', authorizeAdmin, ruleController.deleteRule);
 
-// Settings
-router.get('/settings', settingController.getSettings);
-router.put('/settings', settingController.updateSettings);
+// Settings (Admin Only)
+router.get('/settings', authorizeAdmin, settingController.getSettings);
+router.put('/settings', authorizeAdmin, settingController.updateSettings);
 
-// Analytics
-router.get('/analytics', analyticsController.getAnalytics);
+// Analytics (Admin Only)
+router.get('/analytics', authorizeAdmin, analyticsController.getAnalytics);
 
 // System
-router.get('/system/status', systemController.getSystemStatus);
+router.get('/system/status', authorizeAdmin, systemController.getSystemStatus);
 router.post('/system/password', systemController.changePassword);
 router.get('/system/sidebar-stats', systemController.getSidebarStats);
 
@@ -142,12 +142,12 @@ router.get('/messages/:conversationId', messageController.getMessages);
 router.post('/whatsapp/send', messageController.sendMessage);
 router.put('/whatsapp/takeover', messageController.toggleTakeover);
 
-// WhatsApp Configuration
-router.get('/whatsapp/config', whatsappController.getConfig);
-router.post('/whatsapp/config', whatsappController.addConfig);
-router.put('/whatsapp/config/:id', whatsappController.updateConfig);
-router.delete('/whatsapp/config/:id', whatsappController.deleteConfig);
-router.patch('/whatsapp/bot-status/:id', whatsappController.toggleBotStatus);
-router.post('/whatsapp/test', whatsappController.testConnection);
+// WhatsApp Configuration (Admin Only)
+router.get('/whatsapp/config', authorizeAdmin, whatsappController.getConfig);
+router.post('/whatsapp/config', authorizeAdmin, whatsappController.addConfig);
+router.put('/whatsapp/config/:id', authorizeAdmin, whatsappController.updateConfig);
+router.delete('/whatsapp/config/:id', authorizeAdmin, whatsappController.deleteConfig);
+router.patch('/whatsapp/bot-status/:id', authorizeAdmin, whatsappController.toggleBotStatus);
+router.post('/whatsapp/test', authorizeAdmin, whatsappController.testConnection);
 
 export default router;

@@ -19,7 +19,7 @@ interface Conversation {
 interface Message {
   id: string;
   customer_id: string;
-  sender: 'user' | 'ai' | 'human';
+  sender: string;
   content: string;
   timestamp: string;
 }
@@ -270,8 +270,13 @@ export default function Inbox() {
                     {new Date(convo.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </span>
                 </div>
-                <div className="flex justify-between items-center mt-2">
+                <div className="flex justify-between items-center mt-2 gap-1.5 flex-wrap">
                   <span className="text-xs text-slate-500">{convo.customer_phone}</span>
+                  {convo.assigned_bde_name && (
+                    <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium flex items-center gap-1 border border-slate-200" title={`Assigned BDE: ${convo.assigned_bde_name}`}>
+                      <User className="w-2.5 h-2.5 text-slate-500" /> {convo.assigned_bde_name}
+                    </span>
+                  )}
                   {needsHuman ? (
                     <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-rose-200">
                       <AlertCircle className="w-3 h-3 text-rose-600" /> Needs Human
@@ -313,7 +318,13 @@ export default function Inbox() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-800 leading-tight">{selectedConvo.customer_name}</h3>
-                <span className="text-xs text-slate-500">{selectedConvo.customer_phone}</span>
+                <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                  <span>{selectedConvo.customer_phone}</span>
+                  <span>•</span>
+                  <span>
+                    BDE: <strong className="text-emerald-700 font-semibold">{selectedConvo.assigned_bde_name || 'Unassigned'}</strong>
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -369,19 +380,22 @@ export default function Inbox() {
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.map((msg, idx) => {
-              const isMine = msg.sender === 'ai' || msg.sender === 'human';
+              const isMine = msg.sender !== 'customer' && msg.sender !== 'user';
               return (
                 <div key={msg.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[70%] rounded-xl px-4 py-3 shadow-sm ${
-                    msg.sender === 'user' ? 'bg-white text-slate-800 rounded-tl-sm' :
+                    msg.sender === 'user' || msg.sender === 'customer' ? 'bg-white text-slate-800 rounded-tl-sm' :
                     msg.sender === 'ai' ? 'bg-[#d9fdd3] text-slate-800 rounded-tr-sm' :
                     'bg-[#d9fdd3] text-slate-800 rounded-tr-sm'
                   }`}>
                     <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-                    <div className={`text-[10px] mt-1 flex items-center gap-1 ${isMine ? 'text-emerald-700 justify-end' : 'text-slate-400'}`}>
-                      {msg.sender === 'ai' && <Bot className="w-3 h-3 opacity-70" />}
-                      {msg.sender === 'human' && <User className="w-3 h-3 opacity-70" />}
-                      {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    <div className={`text-[10px] mt-1 flex items-center gap-1.5 ${isMine ? 'text-emerald-700 justify-end' : 'text-slate-400'}`}>
+                      {msg.sender === 'ai' ? (
+                        <span className="flex items-center gap-0.5"><Bot className="w-3 h-3 opacity-70" /> AI</span>
+                      ) : isMine ? (
+                        <span className="flex items-center gap-0.5 font-semibold text-emerald-800"><User className="w-3 h-3 opacity-70" /> {msg.sender === 'human' ? 'BDE' : msg.sender}</span>
+                      ) : null}
+                      <span>{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
                   </div>
                 </div>
@@ -475,6 +489,23 @@ export default function Inbox() {
                 <div className="flex items-center gap-3 text-sm">
                   <Phone className="w-4 h-4 text-slate-400" />
                   <span className="text-slate-700 font-medium">{selectedConvo.customer_phone}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-3">
+                    <User className="w-4 h-4 text-slate-400" />
+                    <div>
+                      <span className="text-xs text-slate-400 block">Assigned BDE</span>
+                      <span className="text-slate-700 font-medium">{selectedConvo.assigned_bde_name || 'Unassigned'}</span>
+                    </div>
+                  </div>
+                  {sessionStorage.getItem('shastika_role')?.toLowerCase() === 'admin' && (
+                    <button 
+                      onClick={() => setIsAssignModalOpen(true)}
+                      className="text-xs text-emerald-600 hover:underline font-semibold"
+                    >
+                      Assign
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <Clock className="w-4 h-4 text-slate-400" />

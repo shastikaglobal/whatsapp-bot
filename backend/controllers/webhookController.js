@@ -60,10 +60,64 @@ export function getHandoverReplyText(msgText) {
 }
 
 /**
+ * Automatically assigns an active BDE to a customer in round-robin / least-busy order.
+ * If already assigned to an active BDE, keeps that assignment.
+ * If no active BDEs exist, leaves unassigned (null).
+ */
+export async function autoAssignBdeToCustomer(customerId) {
+  try {
+    // 1. Check if customer already has an assigned active BDE
+    const { rows: custRows } = await pool.query(
+      'SELECT assigned_bde_id FROM customers WHERE id = $1',
+      [customerId]
+    );
+    const currentBdeId = custRows[0]?.assigned_bde_id;
+
+    if (currentBdeId) {
+      const { rows: activeBde } = await pool.query(
+        "SELECT id, name FROM employees WHERE id = $1 AND LOWER(role) = 'bde' AND status = 'Active'",
+        [currentBdeId]
+      );
+      if (activeBde.length > 0) {
+        console.log(`[Auto-Assign BDE] Customer ${customerId} already assigned to active BDE: ${activeBde[0].name} (ID: ${activeBde[0].id})`);
+        return activeBde[0];
+      }
+    }
+
+    // 2. Select active BDE with fewest assigned customers (round-robin / least-load)
+    const { rows: candidateBdes } = await pool.query(`
+      SELECT e.id, e.name, COUNT(c.id) AS assigned_count
+      FROM employees e
+      LEFT JOIN customers c ON c.assigned_bde_id = e.id
+      WHERE LOWER(e.role) = 'bde' AND e.status = 'Active'
+      GROUP BY e.id, e.name
+      ORDER BY assigned_count ASC, e.id ASC
+      LIMIT 1
+    `);
+
+    if (candidateBdes.length === 0) {
+      console.log(`[Auto-Assign BDE] No active BDEs found. Customer ${customerId} remains unassigned.`);
+      return null;
+    }
+
+    const assignedBde = candidateBdes[0];
+    await pool.query(
+      'UPDATE customers SET assigned_bde_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [assignedBde.id, customerId]
+    );
+    console.log(`[Auto-Assign BDE] Assigned customer ${customerId} to BDE: ${assignedBde.name} (ID: ${assignedBde.id}, load: ${assignedBde.assigned_count})`);
+    return assignedBde;
+  } catch (err) {
+    console.error('[Auto-Assign BDE Error]:', err.message);
+    return null;
+  }
+}
+
+/**
  * Dispatches WhatsApp handover alert to admin/BDE phone numbers configured in bot_settings.
  * Fails gracefully (logs warning) if outside the 24-hour Meta messaging window.
  */
-export async function notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, accessToken) {
+export async function notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, accessToken, assignedBde = null) {
   try {
     const { rows: settingRows } = await pool.query(
       "SELECT setting_value FROM bot_settings WHERE setting_key = 'handover_notify_numbers'"
@@ -92,7 +146,7 @@ export async function notifyAdminHandover(customerId, senderPhone, senderName, r
     );
 
     const recentFormatted = last3.reverse().map(m => {
-      const tag = m.sender === 'ai' ? '🤖 Bot' : (m.sender === 'human' ? '👤 BDE' : '💬 Customer');
+      const tag = m.sender === 'ai' ? '🤖 Bot' : (m.sender === 'human' || m.sender !== 'customer' ? '👤 ' + m.sender : '💬 Customer');
       return `${tag}: ${m.content}`;
     }).join('\n');
 
@@ -102,6 +156,7 @@ Customer requested human / BDE assistance.
 
 *Name:* ${senderName || 'Customer'}
 *Phone:* +${senderPhone}
+*Assigned BDE:* ${assignedBde?.name || 'Unassigned'}
 
 *Recent Conversation:*
 ${recentFormatted || 'No prior messages'}
@@ -530,6 +585,9 @@ export const handleIncomingMessage = async (req, res) => {
 
         console.log(`[Webhook] Fast regex human handover requested by customer ${customerId} ("${msgText}"). Activating handover mode.`);
 
+        // Auto-assign to an active BDE via round-robin
+        const assignedBde = await autoAssignBdeToCustomer(customerId);
+
         await pool.query(
           'UPDATE conversations SET status = $1, requires_admin_attention = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           ['handover', convId]
@@ -540,7 +598,7 @@ export const handleIncomingMessage = async (req, res) => {
         );
 
         // Notify Admin / BDE via WhatsApp
-        notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token).catch(e => {
+        notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token, assignedBde).catch(e => {
           console.warn('[Webhook] Error calling notifyAdminHandover:', e.message);
         });
       }
@@ -574,6 +632,7 @@ export const handleIncomingMessage = async (req, res) => {
 
         if (intent === 'Human Request') {
           console.log(`[Webhook] Gemini AI classified message as Human Request for customer ${customerId}. Activating handover.`);
+          const assignedBde = await autoAssignBdeToCustomer(customerId);
           await pool.query(
             'UPDATE conversations SET status = $1, requires_admin_attention = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             ['handover', convId]
@@ -582,7 +641,7 @@ export const handleIncomingMessage = async (req, res) => {
             'UPDATE customers SET intent = $1, is_important = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             ['Human Request', customerId]
           );
-          notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token).catch(e => {
+          notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token, assignedBde).catch(e => {
             console.warn('[Webhook] Error calling notifyAdminHandover:', e.message);
           });
         } else {

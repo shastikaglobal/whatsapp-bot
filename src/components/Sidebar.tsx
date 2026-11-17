@@ -33,8 +33,12 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
     return () => clearInterval(interval);
   }, []);
 
+  const userRole = String(sessionStorage.getItem('shastika_role') || '').toLowerCase();
+  const isAdmin = userRole === 'admin';
+
   const toggleGlobalBot = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isAdmin) return;
     if (!stats) return;
     const newState = !stats.botActive;
     try {
@@ -46,23 +50,26 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
   };
 
   const coreSuite = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'WhatsApp Inbox', path: '/inbox', icon: MessageSquareText, badge: 'Live' },
     { name: 'Customers', path: '/customers', icon: Users },
-    { name: 'Products', path: '/products', icon: Package },
   ];
-  if (sessionStorage.getItem('shastika_role') === 'Admin') {
-    coreSuite.push({ name: 'Employees', path: '/employees', icon: Users });
+
+  if (isAdmin) {
+    coreSuite.unshift({ name: 'Dashboard', path: '/', icon: LayoutDashboard });
+    coreSuite.push({ name: 'Products', path: '/products', icon: Package });
+    coreSuite.push({ name: 'Employees / BDEs', path: '/employees', icon: Users });
+  } else {
+    coreSuite.push({ name: 'Product Knowledge', path: '/products', icon: Package });
   }
 
-  const automationEngine = [
+  const automationEngine = isAdmin ? [
     { name: 'Auto Reply', path: '/rules', icon: Workflow },
     { name: 'Holidays', path: '/holidays', icon: Calendar },
     { name: 'AI Settings', path: '/settings', icon: Sliders },
     { name: 'WhatsApp API', path: '/whatsapp', icon: MessageSquareText },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Settings', path: '/app-settings', icon: Settings },
-  ];
+  ] : [];
 
   return (
     <>
@@ -118,23 +125,25 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
           </div>
 
           {/* Automation & Engine */}
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-bold tracking-wider text-slate-500 uppercase mb-3 px-1">Automation & Engine</div>
-            {automationEngine.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setIsOpen(false)}
-                  className={({ isActive }) => clsx('nav-link-item', isActive ? 'nav-link-active' : 'nav-link-inactive')}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{item.name}</span>
-                </NavLink>
-              );
-            })}
-          </div>
+          {automationEngine.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold tracking-wider text-slate-500 uppercase mb-3 px-1">Automation & Engine</div>
+              {automationEngine.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsOpen(false)}
+                    className={({ isActive }) => clsx('nav-link-item', isActive ? 'nav-link-active' : 'nav-link-inactive')}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{item.name}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Bot Overview Panel */}
@@ -196,10 +205,12 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
         <div className="p-4 border-t border-slate-800/50 mt-auto">
           <div 
             onClick={() => {
-              setIsOpen(false);
-              navigate('/whatsapp');
+              if (isAdmin) {
+                setIsOpen(false);
+                navigate('/whatsapp');
+              }
             }}
-            className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 flex items-center justify-between hover:bg-slate-800/60 transition-colors cursor-pointer"
+            className={`p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 flex items-center justify-between ${isAdmin ? 'hover:bg-slate-800/60 transition-colors cursor-pointer' : 'cursor-default'}`}
           >
             <div className="flex items-center gap-3">
               <span className="relative flex h-2.5 w-2.5">
@@ -211,7 +222,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
                  <span className="text-[10px] text-emerald-400 font-medium">Webhook Connected</span>
               </div>
             </div>
-            <Settings className="w-4 h-4 text-slate-500" />
+            {isAdmin && <Settings className="w-4 h-4 text-slate-500" />}
           </div>
         </div>
       </aside>

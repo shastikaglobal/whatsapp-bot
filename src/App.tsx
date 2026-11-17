@@ -24,6 +24,14 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
+const AdminRoute = ({ children }: { children: JSX.Element }) => {
+  const role = String(sessionStorage.getItem('shastika_role') || '').toLowerCase();
+  if (role !== 'admin') {
+    return <Navigate to="/inbox" replace />;
+  }
+  return children;
+};
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -36,13 +44,13 @@ export default function App() {
           <Route path="inbox" element={<Inbox />} />
           <Route path="customers" element={<Customers />} />
           <Route path="products" element={<Products />} />
-          <Route path="holidays" element={<Holidays />} />
-          <Route path="rules" element={<AutoReplyRules />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="employees" element={<Employees />} />
-          <Route path="app-settings" element={<AppSettings />} />
-          <Route path="whatsapp" element={<WhatsAppSettings />} />
+          <Route path="holidays" element={<AdminRoute><Holidays /></AdminRoute>} />
+          <Route path="rules" element={<AdminRoute><AutoReplyRules /></AdminRoute>} />
+          <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
+          <Route path="analytics" element={<AdminRoute><Analytics /></AdminRoute>} />
+          <Route path="employees" element={<AdminRoute><Employees /></AdminRoute>} />
+          <Route path="app-settings" element={<AdminRoute><AppSettings /></AdminRoute>} />
+          <Route path="whatsapp" element={<AdminRoute><WhatsAppSettings /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
