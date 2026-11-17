@@ -24,29 +24,50 @@ export const generateAiReply = async (customerId, incomingMessage) => {
       };
     }
 
-    // 2. Fetch recent conversation history for context
+    // 2. Fetch recent conversation history (last 10 messages in chronological order)
     const { rows: messages } = await pool.query(
-      'SELECT sender, content FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC LIMIT 10',
+      `SELECT sender, content FROM (
+         SELECT sender, content, timestamp 
+         FROM messages 
+         WHERE customer_id = $1 
+         ORDER BY timestamp DESC 
+         LIMIT 10
+       ) sub ORDER BY timestamp ASC`,
       [customerId]
     );
 
     let historyText = '';
-    messages.forEach(m => {
-      const role = m.sender === 'ai' ? 'Bot' : 'Customer';
-      historyText += `${role}: ${m.content}\n`;
-    });
+    if (messages.length === 0) {
+      historyText = '(No previous messages in this conversation)\n';
+    } else {
+      messages.forEach(m => {
+        const role = m.sender === 'ai' ? 'Sales Assistant' : 'Customer';
+        historyText += `${role}: ${m.content}\n`;
+      });
+    }
 
     // 3. Fetch available products from DB for context
     const { rows: products } = await pool.query(
-      'SELECT name, category, description, price, moq, availability, shippinginfo as "shippingInfo" FROM products'
+      'SELECT name, category, description, price, moq, availability, shippinginfo as "shippingInfo" FROM products ORDER BY name ASC'
     );
 
-    let productContext = 'Available Products:\n';
+    let productContext = '';
     if (products.length === 0) {
-      productContext += 'No products listed currently. Offer human support for details.\n';
+      productContext = `PRODUCTS SECTION:
+(No products are currently listed in the database)
+Our company core export produce includes fresh Cavendish bananas, mature semi-husked coconuts, watermelons, pumpkins, and cucumbers.
+CRITICAL: Since exact prices, MOQs, stock counts, and shipping transit days are NOT in the database, you must NEVER invent or guess them. State that our export sales team will confirm pricing, MOQ, and shipping details.`;
     } else {
+      productContext = 'PRODUCTS SECTION (Facts from Database):\n';
       products.forEach(p => {
-        productContext += `- Name: ${p.name}\n  Category: ${p.category}\n  Price: ${p.price}\n  Description: ${p.description}\n  MOQ: ${p.moq}\n  Availability: ${p.availability}\n  Shipping Info: ${p.shippingInfo}\n\n`;
+        productContext += `- Product: ${p.name}\n` +
+          (p.category ? `  Category: ${p.category}\n` : '') +
+          (p.description ? `  Description: ${p.description}\n` : '') +
+          (p.price !== null && p.price !== undefined ? `  Price: ₹${p.price}\n` : '  Price: Price on request / team will confirm\n') +
+          (p.moq ? `  MOQ: ${p.moq}\n` : '  MOQ: Team will confirm\n') +
+          (p.availability ? `  Availability: ${p.availability}\n` : '') +
+          (p.shippingInfo ? `  Shipping Info: ${p.shippingInfo}\n` : '') +
+          '\n';
       });
     }
 
@@ -62,55 +83,70 @@ export const generateAiReply = async (customerId, incomingMessage) => {
       aiModel = DEFAULT_AI_MODEL;
     }
 
-    const responseStyle = settings.find(s => s.setting_key === 'ai_response_style')?.setting_value || 'Professional';
-    const systemPromptBase = settings.find(s => s.setting_key === 'ai_system_prompt')?.setting_value ||
-      'You are a helpful and polite WhatsApp customer support AI for Shastika Global Impex. Your goal is to answer customer questions accurately based ONLY on the provided context below.';
-
+    // Filter out sensitive and greeting settings so they don't pollute prompt or cause greeting loops
+    const ignoredSettingKeys = [
+      'welcome_message',
+      'first_time_greeting',
+      'outside_hours_reply',
+      'holiday_reply',
+      'whatsapp_verify_token',
+      'meta_app_secret',
+      'meta_app_id',
+      'ai_api_key',
+      'ai_model',
+      'ai_system_prompt',
+      'ai_response_style'
+    ];
     let botContext = '';
     settings.forEach(s => {
-      if (!s.setting_key.startsWith('ai_')) {
+      if (!ignoredSettingKeys.includes(s.setting_key) && !s.setting_key.startsWith('ai_')) {
         botContext += `${s.setting_key}: ${s.setting_value}\n`;
       }
     });
 
     // 5. Construct System Prompt
-    const systemPrompt = `${systemPromptBase}
+    const systemPrompt = `You are the sales assistant of Shastika Global Impex Private Limited (Tamil Nadu, India), exporting fresh agricultural produce.
 
-Required Tone/Style: ${responseStyle}
+RULES OF ENGAGEMENT:
+1. ONGOING CONVERSATION: Use the last 10 messages below as context. NEVER repeat the welcome message or re-introduce yourself. You are in the middle of a continuous conversation.
+2. LANGUAGE REQUIREMENT:
+   - Reply in the EXACT language the customer writes in:
+     * English -> clear, professional English.
+     * Tamil -> polite, natural Tamil (தமிழ்).
+     * Tanglish -> natural Tanglish (e.g. "Kandippa, ungalukku coconut quote anuppurom.").
+     * Other languages -> respond in that language.
+   - Never switch to English if the customer wrote in Tamil or Tanglish.
+3. CONCISENESS: Keep your reply short and professional, strictly maximum 3 to 4 lines, and at most ONE emoji.
+4. STRICT PRODUCT TRUTH: ONLY use facts from the PRODUCTS SECTION below. Never invent prices, MOQ, certificates, or delivery dates. If unknown or not in the list, state that our sales team will confirm.
+5. COLLECT MISSING DETAILS ONE AT A TIME: In a natural sales conversation, collect missing details one at a time:
+   - Product
+   - Quantity
+   - Packing requirement
+   - Destination country / discharge port
+   - Incoterm (FOB or CIF)
+   Do NOT ask for details the customer has already given in this or earlier messages.
+6. QUOTATION HANDOVER: Once product, quantity, and destination are known:
+   - State that our sales team will prepare and send an official quotation.
+   - Set "is_important": true and "intent": "Quotation".
+7. SHORT ACKNOWLEDGEMENTS: For short messages like "ok", "thanks", "k", "okay", "thank you":
+   - Reply with a short natural acknowledgement (e.g. "Understood! 👍" or "You're welcome! Feel free to ask if you have more questions."), or nothing if the conversation is complete.
+   - NEVER reply with "You're welcome!" when the user simply says "ok" or "k".
+8. UNRELATED QUERIES: If the customer asks about something unrelated to Shastika Global Impex or fresh agro exports (e.g. general knowledge, trivia, non-business questions), politely bring the conversation back to our fresh produce export products.
 
-BUSINESS CONTEXT:
-${botContext}
+${botContext ? `COMPANY CONTEXT:\n${botContext}\n` : ''}${productContext}
 
-PRODUCT INFORMATION:
-${productContext}
-
-RULES:
-1. ONLY offer products listed in the PRODUCT INFORMATION section.
-2. If a customer asks for a product not in the list, politely inform them it is unavailable and offer human assistance.
-3. Keep answers concise, polite, and friendly, suitable for WhatsApp messaging.
-4. Do not invent or hallucinate prices or details not in the database.
-
-LANGUAGE REQUIREMENT (CRITICAL):
-Detect the language used by the customer message and respond in the EXACT same language. 
-Never unnecessarily switch to English. 
-- If the customer uses Tamil, respond in Tamil. 
-- If the customer uses Tanglish, respond naturally in Tanglish (e.g. "Aama, available-aa irukku"). 
-- If the customer uses Hindi, respond in Hindi.
-- If the customer uses another language, respond in that language. 
-Preserve the customer's conversational style.
-
-CONVERSATION HISTORY:
+CONVERSATION HISTORY (Last 10 messages):
 ${historyText}
 
-OUTPUT FORMAT:
-You MUST output exactly and ONLY a valid JSON object with the following structure. Do not use markdown code blocks or additional text.
-{
-  "intent": "string (One of: Order, Product Enquiry, Price Enquiry, Quotation, Complaint, Follow-up, General)",
-  "is_important": "boolean (true if intent is Order, Quotation, or Complaint, false otherwise)",
-  "reply_text": "string (Your actual reply to the customer)"
-}
+Current Customer Message: "${incomingMessage}"
 
-Current Customer Message: ${incomingMessage}`;
+OUTPUT FORMAT:
+Respond with ONLY a valid JSON object in this exact schema (no markdown fences, no surrounding text):
+{
+  "reply_text": "string (maximum 3-4 lines, at most 1 emoji)",
+  "intent": "string (One of: Quotation, Product Enquiry, Price Enquiry, Order, Follow-up, General)",
+  "is_important": boolean
+}`;
 
     // 6. Call Gemini REST API with 20000ms timeout
     url = `https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent`;
@@ -118,7 +154,12 @@ Current Customer Message: ${incomingMessage}`;
     const response = await axios.post(url, {
       contents: [{
         parts: [{ text: systemPrompt }]
-      }]
+      }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 800,
+        temperature: 0.3
+      }
     }, {
       headers: {
         'Content-Type': 'application/json',
@@ -160,8 +201,10 @@ Current Customer Message: ${incomingMessage}`;
       };
     } catch (e) {
       console.warn('AI returned non-JSON text, extracting plain reply:', jsonStr);
+      const match = jsonStr.match(/"reply_text"\s*:\s*"((?:[^"\\]|\\.)*)"/) || jsonStr.match(/"reply_text"\s*:\s*"([^"\r\n]+)/);
+      let extractedText = match ? match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').trim() : jsonStr;
       return {
-        reply_text: jsonStr.replace(/^[{\s\S]*"reply_text":\s*"([^"]+)"[\s\S]*$/, '$1') || jsonStr,
+        reply_text: extractedText,
         intent: "General",
         is_important: false
       };

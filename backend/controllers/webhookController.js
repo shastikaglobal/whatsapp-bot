@@ -3,6 +3,89 @@ import { sendWhatsAppMessage } from '../services/whatsappService.js';
 import { generateAiReply } from '../services/aiService.js';
 import crypto from 'crypto';
 
+// Pure greeting regex (English, Tamil, transliterated)
+export const PURE_GREETING_REGEX = /^(hi+|hello+|hey+|hlo+|vanakkam|namaste|good\s+morning|good\s+afternoon|good\s+evening|வணக்கம்)[\s!.]*$/i;
+
+// Short acknowledgement and gratitude regexes
+export const ACKNOWLEDGEMENT_REGEX = /^(ok+|okay|k|noted|sure|alright|fine|சரி)[\s.!]*$/i;
+export const THANKS_REGEX = /^(thanks+|thank\s+you|thx|tq|நன்றி)[\s.!]*$/i;
+
+/**
+ * Builds a regex with word boundaries, plurals, and common typos.
+ * Supports Unicode boundaries for multilingual matching.
+ */
+export function buildKeywordRegex(keyword) {
+  if (!keyword || typeof keyword !== 'string') return null;
+  const clean = keyword.trim().toLowerCase();
+  if (!clean) return null;
+
+  // Dictionary of known export products with common typos, stems, and plurals
+  const dictionary = {
+    coconut: ['coconut', 'coconuts', 'cocunut', 'cocunuts', 'coconat', 'kokonut'],
+    banana: ['banana', 'bananas', 'bannana', 'bannanas'],
+    watermelon: ['watermelon', 'watermelons', 'water melon', 'water melons'],
+    pumpkin: ['pumpkin', 'pumpkins', 'pumkin', 'pumkins'],
+    cucumber: ['cucumber', 'cucumbers', 'cucamber', 'cucambers']
+  };
+
+  let variants = null;
+  for (const [key, list] of Object.entries(dictionary)) {
+    if (clean === key || list.includes(clean)) {
+      variants = list;
+      break;
+    }
+  }
+
+  if (variants) {
+    const escaped = variants.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'));
+    return new RegExp(`(?:^|[\\s,.:;!?/()"-])(${escaped.join('|')})(?=$|[\\s,.:;!?/()"-])`, 'giu');
+  }
+
+  // Generic keyword support: handle singular and plural (s / es)
+  let escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  if (escaped.endsWith('es')) {
+    const base = escaped.slice(0, -2);
+    return new RegExp(`(?:^|[\\s,.:;!?/()"-])(${base}(?:es)?)(?=$|[\\s,.:;!?/()"-])`, 'giu');
+  } else if (escaped.endsWith('s')) {
+    const base = escaped.slice(0, -1);
+    return new RegExp(`(?:^|[\\s,.:;!?/()"-])(${base}(?:s)?)(?=$|[\\s,.:;!?/()"-])`, 'giu');
+  }
+  return new RegExp(`(?:^|[\\s,.:;!?/()"-])(${escaped}(?:s|es)?)(?=$|[\\s,.:;!?/()"-])`, 'giu');
+}
+
+/**
+ * Finds matching rule among active rules.
+ * If multiple keywords match, selects the rule whose match appears LAST in the text.
+ */
+export function matchAutoReplyRule(text, rules) {
+  if (!text || !rules || rules.length === 0) return null;
+
+  let bestRule = null;
+  let maxLastIndex = -1;
+
+  for (const rule of rules) {
+    const regex = buildKeywordRegex(rule.keyword);
+    if (!regex) continue;
+
+    let match;
+    let ruleLastIndex = -1;
+    while ((match = regex.exec(text)) !== null) {
+      // Calculate true keyword start position
+      const leadOffset = match[0].length - match[1].length;
+      ruleLastIndex = match.index + leadOffset;
+    }
+
+    if (ruleLastIndex !== -1) {
+      if (ruleLastIndex > maxLastIndex) {
+        maxLastIndex = ruleLastIndex;
+        bestRule = rule;
+      }
+    }
+  }
+
+  return bestRule;
+}
+
 export const verifyWebhook = async (req, res) => {
   try {
     const mode = req.query['hub.mode'];
@@ -289,25 +372,61 @@ export const handleIncomingMessage = async (req, res) => {
         console.error('[Webhook Holiday Check Error]:', holidayErr.message);
       }
 
-      // 4.2 Keyword Rules Check (Longest keywords prioritized for specificity)
-      if (!replyText) {
-        const { rows: rules } = await pool.query(
-          'SELECT keyword, reply_text FROM auto_reply_rules WHERE is_active = true ORDER BY LENGTH(keyword) DESC'
+      // 4.2 Check 24-Hour Conversation Window
+      const { rows: priorMsgRows } = await pool.query(
+        `SELECT id FROM messages 
+         WHERE customer_id = $1 
+           AND id != $2 
+           AND timestamp >= NOW() - INTERVAL '24 hours' 
+         LIMIT 1`,
+        [customerId, msgId]
+      );
+      const isNewConversation = priorMsgRows.length === 0;
+      const isPureGreeting = PURE_GREETING_REGEX.test(msgText.trim());
+
+      // 4.3 Welcome Message Check:
+      // Send Welcome Message ONLY for a pure greeting (hi/hello/hii) or the first message of a new conversation that is greeting-oriented.
+      // Never use welcome message as a fallback for unmatched messages.
+      if (!replyText && isPureGreeting) {
+        const { rows: welcomeSetting } = await pool.query(
+          "SELECT setting_value FROM bot_settings WHERE setting_key = 'welcome_message'"
         );
-        const normalizedIncoming = msgText.toLowerCase().trim();
-        for (const rule of rules) {
-          const normalizedKeyword = rule.keyword.toLowerCase().trim();
-          if (normalizedIncoming === normalizedKeyword || normalizedIncoming.includes(normalizedKeyword)) {
-            replyText = rule.reply_text;
-            console.log(`[Webhook] Keyword rule matched: "${rule.keyword}"`);
-            break;
-          }
+        replyText = welcomeSetting[0]?.setting_value?.trim() ||
+          '👋 Welcome to Shastika Global Impex! Thank you for reaching out. How may we assist you today?';
+        console.log(`[Webhook] Pure greeting received ("${msgText}"). Sending welcome message.`);
+      }
+
+      // 4.4 Natural Acknowledgement & Gratitude Check
+      if (!replyText && ACKNOWLEDGEMENT_REGEX.test(msgText.trim())) {
+        replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
+        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation.`);
+      } else if (!replyText && THANKS_REGEX.test(msgText.trim())) {
+        replyText = "You're welcome! Feel free to reach out anytime. 👍";
+        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply.`);
+      }
+
+      // 4.5 RFQ / Detailed Quotation Enquiry Check
+      // If customer provides order volume or quotation terms (e.g. tons, CIF, FOB, quote),
+      // route to Gemini AI to capture parameters and initiate quotation handover (is_important = true).
+      const isDetailedRfq = /(?:quotation|quote|\bcif\b|\bfob\b|\b(?:metric\s+)?tons?\b|\b(?:40ft|20ft|fcl)\b)/i.test(msgText);
+
+      // 4.6 Keyword Rules Check:
+      // Matches case-insensitive contains with word boundaries, plurals (s/es), and common typos.
+      // If multiple products match, answers for the product the customer mentioned last.
+      if (!replyText && !isDetailedRfq) {
+        const { rows: rules } = await pool.query(
+          'SELECT keyword, reply_text FROM auto_reply_rules WHERE is_active = true'
+        );
+        const matchedRule = matchAutoReplyRule(msgText, rules);
+        if (matchedRule) {
+          replyText = matchedRule.reply_text;
+          console.log(`[Webhook] Keyword rule matched: "${matchedRule.keyword}" (last mentioned product prioritized)`);
         }
       }
 
-      // 4.3 Gemini AI Fallback if no rule matched
+      // 4.7 Gemini AI Fallback for RFQs and Unmatched Messages (NEVER welcome message)
       if (!replyText) {
-        console.log(`[Webhook] No keyword rule matched for: "${msgText}". Invoking AI service...`);
+        console.log(`[Webhook] Unmatched / RFQ message: "${msgText}". Routing to Gemini AI service...`);
         const aiResponse = await generateAiReply(customerId, msgText);
         replyText = aiResponse.reply_text;
         intent = aiResponse.intent;
@@ -317,6 +436,12 @@ export const handleIncomingMessage = async (req, res) => {
           await pool.query(
             'UPDATE customers SET intent = $1, is_important = $2 WHERE id = $3',
             [intent, isImportant, customerId]
+          );
+        }
+        if (isImportant) {
+          await pool.query(
+            'UPDATE conversations SET requires_admin_attention = true WHERE id = $1',
+            [convId]
           );
         }
       }

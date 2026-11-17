@@ -30,4 +30,19 @@ pool.on('error', (err) => {
   console.error('Unexpected database connection error:', err.message);
 });
 
+// Safe, non-destructive schema migration for products.moq column
+pool.query(`
+  DO $$
+  BEGIN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'products' AND column_name = 'moq' AND data_type = 'integer'
+    ) THEN
+      ALTER TABLE products ALTER COLUMN moq TYPE VARCHAR(100) USING moq::text;
+    END IF;
+  END $$;
+`).catch(err => {
+  console.warn('[DB Schema Migration Notice]:', err.message);
+});
+
 export default pool;

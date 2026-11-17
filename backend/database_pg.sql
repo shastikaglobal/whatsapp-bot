@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS products (
     category VARCHAR(100),
     description TEXT,
     price DECIMAL(10, 2),
-    moq INT,
+    moq VARCHAR(100),
     availability VARCHAR(20) DEFAULT 'In Stock' CHECK (availability IN ('In Stock', 'Out of Stock', 'Made to Order')),
     shippingInfo TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
