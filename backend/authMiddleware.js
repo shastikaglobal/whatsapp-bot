@@ -1,16 +1,18 @@
 import jwt from 'jsonwebtoken';
 
 export const authenticate = (req, res, next) => {
-  const token = req.headers['authorization'];
+  const authHeader = req.headers['authorization'];
   
-  if (!token) {
+  if (!authHeader) {
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
 
-  const tokenValue = token.split(' ')[1];
+  const parts = authHeader.trim().split(' ');
+  const tokenValue = parts.length === 2 ? parts[1] : parts[0];
   
   try {
-    const decoded = jwt.verify(tokenValue, process.env.JWT_SECRET || 'fallback_secret');
+    const secret = process.env.JWT_SECRET || 'shastika_default_jwt_secret_2025';
+    const decoded = jwt.verify(tokenValue, secret);
     req.user = decoded;
     next();
   } catch (error) {

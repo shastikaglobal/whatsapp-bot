@@ -99,8 +99,8 @@ export const getAnalytics = async (req, res) => {
         messages: messagesChart,
         customers: customersChart,
         aiVsRule: [
-          { name: 'AI Replies', value: Number(aiRuleStats[0].ai_replies || 0) },
-          { name: 'Rule Replies', value: Number(aiRuleStats[0].rule_replies || 0) }
+          { name: 'AI Replies', value: Number(aiRuleStats[0]?.ai_replies || 0) },
+          { name: 'Rule Replies', value: Number(aiRuleStats[0]?.rule_replies || 0) }
         ]
       }
     });

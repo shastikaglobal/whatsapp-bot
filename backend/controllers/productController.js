@@ -2,7 +2,9 @@ import pool from '../config/db.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { rows: rows } = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+    const { rows } = await pool.query(
+      'SELECT id, name, category, description, price, moq, availability, shippinginfo as "shippingInfo", created_at, updated_at FROM products ORDER BY created_at DESC'
+    );
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -11,7 +13,10 @@ export const getProducts = async (req, res) => {
 
 export const getProductById = async (req, res) => {
   try {
-    const { rows: rows } = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query(
+      'SELECT id, name, category, description, price, moq, availability, shippinginfo as "shippingInfo", created_at, updated_at FROM products WHERE id = $1',
+      [req.params.id]
+    );
     if (rows.length === 0) return res.status(404).json({ message: 'Product not found' });
     res.json(rows[0]);
   } catch (error) {

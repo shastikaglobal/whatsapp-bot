@@ -158,7 +158,7 @@ CREATE TRIGGER update_bot_settings_updated_at
 -- Seed Default Bot Settings
 INSERT INTO bot_settings (setting_key, setting_value, description) VALUES 
 ('auto_reply_enabled', 'true', 'Enable or disable bot auto replies globally'),
-('ai_model', 'gemini-3.5-flash-lite', 'Gemini AI model for auto-replies'),
+('ai_model', 'gemini-1.5-flash', 'Gemini AI model for auto-replies'),
 ('ai_response_style', 'Professional', 'Tone and style of AI responses'),
 ('ai_system_prompt', 'You are a helpful and polite WhatsApp customer support AI for Shastika Global Impex. Your goal is to answer customer questions accurately based ONLY on the provided context below.', 'Base system prompt for AI'),
 ('welcome_message', '👋 Welcome to Shastika Global Impex! Thank you for reaching out. How may we assist you today?', 'Default welcome message'),

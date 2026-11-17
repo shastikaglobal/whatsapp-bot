@@ -2,8 +2,8 @@ import pool from '../config/db.js';
 
 export const getCustomers = async (req, res) => {
   try {
-    const { rows: rows } = await pool.query(`
-      SELECT c.*, e.name as assigned_bde_name
+    const { rows } = await pool.query(`
+      SELECT c.*, c.lastmessage as "lastMessage", e.name as assigned_bde_name
       FROM customers c
       LEFT JOIN employees e ON c.assigned_bde_id = e.id
       ORDER BY c.created_at DESC

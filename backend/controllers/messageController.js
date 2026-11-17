@@ -18,7 +18,7 @@ export const getConversations = async (req, res) => {
       FROM conversations c
       JOIN customers cust ON c.customer_id = cust.id
       LEFT JOIN employees e ON cust.assigned_bde_id = e.id
-      LEFT JOIN whatsapp_connections wc ON c.phone_number_id = wc.phone_number_id
+      LEFT JOIN whatsapp_connections wc ON TRIM(c.phone_number_id) = TRIM(wc.phone_number_id)
       ORDER BY c.updated_at DESC
     `);
     res.json(rows);
@@ -31,10 +31,42 @@ export const getConversations = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { rows } = await pool.query(
-      'SELECT * FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC',
-      [conversationId]
-    );
+    let rows;
+    
+    if (conversationId && conversationId.startsWith('cust_')) {
+      const result = await pool.query(
+        'SELECT * FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC',
+        [conversationId]
+      );
+      rows = result.rows;
+    } else {
+      const convRes = await pool.query(
+        'SELECT customer_id, phone_number_id FROM conversations WHERE id = $1',
+        [parseInt(conversationId, 10) || 0]
+      );
+      if (convRes.rows.length > 0) {
+        const { customer_id, phone_number_id } = convRes.rows[0];
+        if (phone_number_id) {
+          const result = await pool.query(
+            'SELECT * FROM messages WHERE customer_id = $1 AND (phone_number_id = $2 OR phone_number_id IS NULL) ORDER BY timestamp ASC',
+            [customer_id, phone_number_id]
+          );
+          rows = result.rows;
+        } else {
+          const result = await pool.query(
+            'SELECT * FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC',
+            [customer_id]
+          );
+          rows = result.rows;
+        }
+      } else {
+        const result = await pool.query(
+          'SELECT * FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC',
+          [conversationId]
+        );
+        rows = result.rows;
+      }
+    }
     res.json(rows);
   } catch (error) {
     console.error('getMessages error:', error.message);
@@ -44,7 +76,7 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { customerId, content } = req.body;
+    const { customerId, conversationId, phoneNumberId: explicitPhoneId, content } = req.body;
     
     if (!customerId || !content || !content.trim()) {
       return res.status(400).json({ error: 'Customer ID and message content are required.' });
@@ -58,20 +90,36 @@ export const sendMessage = async (req, res) => {
     const phone = custRows[0].phone;
 
     // 2. Identify receiving phone number ID for this conversation
-    const { rows: convRows } = await pool.query(
-      'SELECT phone_number_id FROM conversations WHERE customer_id = $1 ORDER BY updated_at DESC LIMIT 1',
-      [customerId]
-    );
-    const phoneNumberId = convRows.length > 0 ? convRows[0].phone_number_id : null;
+    let actualPhoneId = explicitPhoneId || null;
+    let convId = conversationId || null;
+
+    if (!actualPhoneId && convId) {
+      const { rows: cRows } = await pool.query(
+        'SELECT id, phone_number_id FROM conversations WHERE id = $1',
+        [convId]
+      );
+      if (cRows.length > 0) {
+        actualPhoneId = cRows[0].phone_number_id;
+      }
+    }
+
+    if (!actualPhoneId) {
+      const { rows: convRows } = await pool.query(
+        'SELECT id, phone_number_id FROM conversations WHERE customer_id = $1 ORDER BY updated_at DESC LIMIT 1',
+        [customerId]
+      );
+      if (convRows.length > 0) {
+        actualPhoneId = convRows[0].phone_number_id;
+        convId = convId || convRows[0].id;
+      }
+    }
 
     // 3. Resolve connection credentials for this phone_number_id
     let accessToken = null;
-    let actualPhoneId = phoneNumberId;
-
-    if (phoneNumberId) {
+    if (actualPhoneId) {
       const { rows: connRows } = await pool.query(
-        'SELECT phone_number_id, access_token FROM whatsapp_connections WHERE phone_number_id = $1',
-        [phoneNumberId]
+        'SELECT phone_number_id, access_token FROM whatsapp_connections WHERE TRIM(phone_number_id) = $1',
+        [String(actualPhoneId).trim()]
       );
       if (connRows.length > 0) {
         accessToken = connRows[0].access_token;
@@ -114,14 +162,21 @@ export const sendMessage = async (req, res) => {
     );
 
     // 6. Update conversation timestamp
-    await pool.query(
-      'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE customer_id = $1',
-      [customerId]
-    );
+    if (convId) {
+      await pool.query(
+        'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [convId]
+      );
+    } else {
+      await pool.query(
+        'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE customer_id = $1',
+        [customerId]
+      );
+    }
 
     res.json({ success: true, message: 'Message sent successfully', messageId: metaMsgId });
   } catch (error) {
-    console.error('Send message error:', error);
+    console.error('Send message error:', error.message);
     res.status(500).json({ error: error.message });
   }
 };

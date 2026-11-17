@@ -4,7 +4,17 @@ import pool from '../config/db.js';
 export const generateAiReply = async (customerId, incomingMessage) => {
   let url = '';
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // 1. Fetch Bot Settings & Products
+    const { rows: settings } = await pool.query('SELECT setting_key, setting_value FROM bot_settings');
+
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      const dbApiKey = settings.find(s => s.setting_key === 'ai_api_key')?.setting_value;
+      if (dbApiKey && !dbApiKey.includes('...[HIDDEN]...')) {
+        apiKey = dbApiKey;
+      }
+    }
+
     if (!apiKey) {
       console.warn('GEMINI_API_KEY is not configured. Falling back to default message.');
       return {
@@ -14,7 +24,7 @@ export const generateAiReply = async (customerId, incomingMessage) => {
       };
     }
 
-    // 1. Fetch recent conversation history for context
+    // 2. Fetch recent conversation history for context
     const { rows: messages } = await pool.query(
       'SELECT sender, content FROM messages WHERE customer_id = $1 ORDER BY timestamp ASC LIMIT 10',
       [customerId]
@@ -26,7 +36,7 @@ export const generateAiReply = async (customerId, incomingMessage) => {
       historyText += `${role}: ${m.content}\n`;
     });
 
-    // 2. Fetch available products from DB for context
+    // 3. Fetch available products from DB for context
     const { rows: products } = await pool.query(
       'SELECT name, category, description, price, moq, availability, shippinginfo as "shippingInfo" FROM products'
     );
@@ -40,27 +50,30 @@ export const generateAiReply = async (customerId, incomingMessage) => {
       });
     }
 
-    // 3. Fetch Bot Settings
-    const { rows: settings } = await pool.query('SELECT setting_key, setting_value FROM bot_settings');
-    let botContext = '';
+    // 4. Resolve AI Model & Prompts
+    // Precedence: 1. bot_settings "ai_model", 2. process.env.GEMINI_MODEL, 3. default "gemini-3.5-flash-lite"
+    const DEFAULT_AI_MODEL = 'gemini-3.5-flash-lite';
+    const dbModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value?.trim();
+    let aiModel = dbModel || process.env.GEMINI_MODEL?.trim() || DEFAULT_AI_MODEL;
 
-    let aiModel = settings.find(s => s.setting_key === 'ai_model')?.setting_value;
-    if (!aiModel || aiModel.includes('1.5') || aiModel.includes('2.0') || aiModel.includes('2.5')) {
-      // Use verified fast model
-      aiModel = 'gemini-3.5-flash-lite';
+    // Filter out retired or deprecated models (1.5, 2.0, gemini-pro)
+    if (aiModel.includes('1.5') || aiModel.includes('2.0') || aiModel.includes('gemini-pro')) {
+      console.warn(`[AI Service] Configured model "${aiModel}" is retired or deprecated. Falling back to default "${DEFAULT_AI_MODEL}".`);
+      aiModel = DEFAULT_AI_MODEL;
     }
 
     const responseStyle = settings.find(s => s.setting_key === 'ai_response_style')?.setting_value || 'Professional';
     const systemPromptBase = settings.find(s => s.setting_key === 'ai_system_prompt')?.setting_value ||
       'You are a helpful and polite WhatsApp customer support AI for Shastika Global Impex. Your goal is to answer customer questions accurately based ONLY on the provided context below.';
 
+    let botContext = '';
     settings.forEach(s => {
       if (!s.setting_key.startsWith('ai_')) {
         botContext += `${s.setting_key}: ${s.setting_value}\n`;
       }
     });
 
-    // 4. Construct System Prompt
+    // 5. Construct System Prompt
     const systemPrompt = `${systemPromptBase}
 
 Required Tone/Style: ${responseStyle}
@@ -99,7 +112,7 @@ You MUST output exactly and ONLY a valid JSON object with the following structur
 
 Current Customer Message: ${incomingMessage}`;
 
-    // 5. Call Gemini REST API with timeout
+    // 6. Call Gemini REST API with 20000ms timeout
     url = `https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent`;
 
     const response = await axios.post(url, {
@@ -111,12 +124,29 @@ Current Customer Message: ${incomingMessage}`;
         'Content-Type': 'application/json',
         'x-goog-api-key': apiKey
       },
-      timeout: 12000
+      timeout: 20000
     });
 
-    const rawReply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    // Handle empty or blocked responses safely
+    const candidates = response.data?.candidates;
+    if (!candidates || !Array.isArray(candidates) || candidates.length === 0) {
+      console.warn('[AI Service] No candidates returned (safety block or empty). Prompt feedback:', JSON.stringify(response.data?.promptFeedback || null));
+      return {
+        reply_text: 'Thank you for reaching out to Shastika Global Impex. Our team has received your message and will assist you shortly.',
+        intent: 'General',
+        is_important: false
+      };
+    }
 
-    if (!rawReply) throw new Error('Empty response from AI service');
+    const rawReply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawReply || !rawReply.trim()) {
+      console.warn('[AI Service] Candidate parts text is empty. Prompt feedback:', JSON.stringify(response.data?.promptFeedback || null));
+      return {
+        reply_text: 'Thank you for contacting Shastika Global Impex! How can we assist you today?',
+        intent: 'General',
+        is_important: false
+      };
+    }
 
     // Clean up potential markdown formatting (```json ... ```)
     let jsonStr = rawReply.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -137,7 +167,12 @@ Current Customer Message: ${incomingMessage}`;
       };
     }
   } catch (error) {
-    console.error(`[AI Error] Model: ${url}, Status: ${error.response?.status || 'N/A'}: ${error.response?.data?.error?.message || error.message}`);
+    console.error('=== AI Generation Error ===');
+    console.error('HTTP Status:', error.response?.status || 'N/A');
+    console.error('Endpoint/Model:', url);
+    console.error('Response Data:', JSON.stringify(error.response?.data, null, 2));
+    console.error('Message:', error.message);
+    console.error('===========================');
     return {
       reply_text: 'Thank you for reaching out to Shastika Global Impex. Our team has received your message and will assist you shortly.',
       intent: 'General',

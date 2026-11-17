@@ -114,12 +114,13 @@ export default function Settings() {
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Model Selection</label>
             <select 
-              value={settings.ai_model || 'gemini-1.5-flash'} 
+              value={settings.ai_model || 'gemini-3.5-flash-lite'} 
               onChange={(e) => handleChange('ai_model', e.target.value)}
               className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast)</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Reasoning)</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Recommended)</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
             </select>
           </div>
 
