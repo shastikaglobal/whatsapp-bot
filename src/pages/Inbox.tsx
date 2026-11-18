@@ -407,6 +407,8 @@ export default function Inbox() {
                     <div className={`text-[10px] mt-1 flex items-center gap-1.5 ${isMine ? 'text-emerald-700 justify-end' : 'text-slate-400'}`}>
                       {msg.sender === 'ai' ? (
                         <span className="flex items-center gap-0.5"><Bot className="w-3 h-3 opacity-70" /> AI</span>
+                      ) : msg.sender === 'holding' ? (
+                        <span className="flex items-center gap-0.5 font-semibold text-amber-700"><Bot className="w-3 h-3 opacity-70" /> Auto Holding Reply</span>
                       ) : isMine ? (
                         <span className="flex items-center gap-0.5 font-semibold text-emerald-800"><User className="w-3 h-3 opacity-70" /> {msg.sender === 'human' ? 'BDE' : msg.sender}</span>
                       ) : null}

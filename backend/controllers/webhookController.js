@@ -16,7 +16,8 @@ export const HUMAN_HANDOVER_REGEX = new RegExp(
     // English phrases
     '\\b(?:is\\s+there\\s+)?anyone\\s+else\\b',
     '\\bconnect\\s+(?:me\\s+)?(?:with|to)?\\s*(?:your\\s+)?(?:bde(?:\\s+members?)?|sales(?:\\s+team)?|manager|employee|person|human|agent)\\b',
-    '\\b(?:talk|speak)\\s+(?:to|with)\\s+(?:a\\s+|an\\s+|your\\s+)?(?:human|person|bde|employee|sales(?:\\s+team|\\s+person)?|manager|someone|anybody|agent)\\b',
+    '\\b(?:talk|speak|wanna\\s+talk|want\\s+to\\s+talk)\\s+(?:to|with)?\\s*(?:a\\s+|an\\s+|your\\s+)?(?:bde\\s+)?(?:human|person|bde|employee|sales(?:\\s+team|\\s+person)?|manager|someone|anybody|agent)\\b',
+    '\\bi\\s+(?:wanna|want\\s+to)\\s+(?:talk|speak|connect)\\b',
     '\\b(?:call|phone)\\s+me\\b',
     '\\bgive\\s+me\\s+a\\s+call\\b',
     '\\bwant\\s+(?:to\\s+)?(?:a\\s+)?call\\b',
@@ -45,18 +46,152 @@ export const HUMAN_HANDOVER_REGEX = new RegExp(
   'iu'
 );
 
+// Whole-word Tanglish tokens list (Never match substrings like "younger" or "lounge")
+export const TANGLISH_TOKEN_LIST = [
+  'enna', 'illa', 'illai', 'venum', 'vendum', 'panna', 'pannunga', 'panunga',
+  'mudiyuma', 'irukku', 'iruku', 'iruka', 'irukangala', 'unga', 'ungaluku', 'unggaluku',
+  'enakku', 'enaku', 'sollu', 'sollunga', 'pesa', 'pesanum', 'kooda',
+  'kitta', 'seri', 'aama', 'aamanga', 'nalla', 'nalladhu', 'vanakkam'
+];
+
+/**
+ * Counts distinct whole-word Tanglish tokens matched in the input string.
+ */
+export function countDistinctTanglishTokens(text) {
+  if (!text || typeof text !== 'string') return 0;
+  const clean = text.toLowerCase();
+  const matched = new Set();
+  for (const token of TANGLISH_TOKEN_LIST) {
+    const rx = new RegExp(`\\b${token}\\b`, 'i');
+    if (rx.test(clean)) {
+      matched.add(token);
+    }
+  }
+  return matched.size;
+}
+
+/**
+ * Detects the language of a single message:
+ * - Tamil script (Unicode range U+0B80 to U+0BFF) -> Tamil
+ * - Tanglish ONLY if the message contains at least 2 distinct whole-word Tanglish tokens
+ * - Everything else -> English (the default)
+ */
+export function detectMessageLanguage(text) {
+  if (!text || typeof text !== 'string') return 'english';
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'tamil';
+  
+  const tokenCount = countDistinctTanglishTokens(text);
+  if (tokenCount >= 2) return 'tanglish';
+  
+  return 'english';
+}
+
+// Regex to detect if customer explicitly complains they cannot understand or asks for English
+export const LANGUAGE_COMPLAINT_ENGLISH_REGEX = new RegExp(
+  [
+    '\\b(?:can(?:not|\'?t)|don\'?t)\\s+understand(?:\\s+the)?(?:\\s+language)?\\b',
+    '\\b(?:speak|talk|reply|write|type)\\s+(?:in\\s+)?english\\b',
+    '\\benglish\\s+(?:please|mattum|only)\\b',
+    '\\bonly\\s+english\\b',
+    '\\bpuriyala\\b',
+    '\\bpurila\\b'
+  ].join('|'),
+  'i'
+);
+
+// Regex to detect if customer explicitly asks for Tamil
+export const LANGUAGE_REQUEST_TAMIL_REGEX = new RegExp(
+  [
+    '\\b(?:speak|talk|reply|write)\\s+(?:in\\s+)?tamil\\b',
+    '\\btamil\\s+(?:please|mattum|only)\\b',
+    '\\btamil(?:il|la|le)\\s+(?:pesunga|sollunga)\\b',
+    'தமிழில்',
+    'தமிழ்(?:\\s*பேசு)?'
+  ].join('|'),
+  'i'
+);
+
+/**
+ * Resolves language at conversation level using current message and past 3 customer messages:
+ * - Customer complaint / switch request in current message has absolute priority.
+ * - If current message is clearly English, replies in English even if earlier was Tanglish.
+ * - If current message is a short neutral token (e.g. "ok"), looks at past 3 messages.
+ * - Falls back to saved customer language, then English.
+ */
+export function resolveConversationLanguage(currentMsgText, pastCustomerMsgs = [], savedCustLang = null) {
+  const current = (currentMsgText || '').trim();
+
+  // 1. Explicit complaint or language request in current message
+  if (LANGUAGE_COMPLAINT_ENGLISH_REGEX.test(current)) {
+    return 'english';
+  }
+  if (LANGUAGE_REQUEST_TAMIL_REGEX.test(current)) {
+    return 'tamil';
+  }
+
+  // 2. Direct detection of current message
+  const currentLang = detectMessageLanguage(current);
+  if (currentLang === 'tamil') return 'tamil';
+  if (currentLang === 'tanglish') return 'tanglish';
+
+  // 3. Current message is not Tamil or Tanglish.
+  // Is it substantive text (not just a 1-word ack like "ok" / "k")?
+  const isShortNeutral = /^(?:ok+|okay|k|hi+|hello+|hey+|yes|no|fine|sure|noted)[\s.!,?]*$/i.test(current);
+  if (!isShortNeutral && current.length > 0) {
+    return 'english';
+  }
+
+  // 4. If current is short neutral, check past 3 customer messages
+  for (const prev of pastCustomerMsgs) {
+    if (!prev || typeof prev !== 'string') continue;
+    const prevText = prev.trim();
+    if (LANGUAGE_COMPLAINT_ENGLISH_REGEX.test(prevText)) return 'english';
+    if (LANGUAGE_REQUEST_TAMIL_REGEX.test(prevText)) return 'tamil';
+    const prevLang = detectMessageLanguage(prevText);
+    if (prevLang === 'tamil') return 'tamil';
+    if (prevLang === 'tanglish') return 'tanglish';
+    if (prevLang === 'english' && prevText.length > 3) return 'english';
+  }
+
+  // 5. Fallback to saved customer language, or English
+  if (savedCustLang && ['english', 'tamil', 'tanglish'].includes(savedCustLang.toLowerCase())) {
+    return savedCustLang.toLowerCase();
+  }
+
+  return 'english';
+}
+
 /**
  * Returns a polite, honest handover acknowledgement in the customer's language.
  */
-export function getHandoverReplyText(msgText) {
-  const text = msgText || '';
-  if (/[\u0B80-\u0BFF]/.test(text)) {
+export function getHandoverReplyText(msgText, preferredLang = null) {
+  const lang = preferredLang || detectMessageLanguage(msgText);
+  if (lang === 'tamil') {
     return 'நிச்சயமாக, உங்கள் கோரிக்கையை எங்கள் விற்பனைக் குழுவிற்கு (BDE) அனுப்பியுள்ளேன். அவர்கள் விரைவில் உங்களைத் தொடர்பு கொள்வார்கள். அதற்குள் உங்கள் பெயர், தேவையான பொருள் மற்றும் அளவைத் தெரிவிக்க முடியுமா? 🤝';
   }
-  if (/(?:kooda|kitta|panunga|pannunga|mudiyuma|pesa|pesanum|irukangala|enga|unga|solla|illaya|yaara?vathu)/i.test(text)) {
+  if (lang === 'tanglish') {
     return 'Sure, unga request ah engaloda sales team-ku (BDE) forward pannirukken. Seekiram ungalai contact pannuvanga. Meanwhile unga name, required product and quantity solla mudiyuma? 🤝';
   }
   return 'Sure, I am passing your request to our sales team (BDE). They will contact you shortly. Meanwhile, may I have your name, product, and quantity so they can assist you faster? 🤝';
+}
+
+/**
+ * Returns a holding reply for customers waiting in handover mode (sent at most once per 30 minutes).
+ */
+export function getHoldingReplyText(lang, isComplaint = false) {
+  if (isComplaint || lang === 'english') {
+    if (isComplaint) {
+      return 'Apologies! Our sales team has received your request and will contact you shortly in English. Thank you for your patience. 🙏';
+    }
+    return 'Our sales team has your request and will contact you shortly. Thank you for your patience. 🙏';
+  }
+  if (lang === 'tamil') {
+    return 'எங்கள் விற்பனைக் குழு (BDE) உங்கள் கோரிக்கையைப் பெற்றுள்ளது, விரைவில் உங்களைத் தொடர்பு கொள்வார்கள். உங்கள் பொறுமைக்கு நன்றி. 🙏';
+  }
+  if (lang === 'tanglish') {
+    return 'Engaloda sales team unga request-ai paathutu irukanga, seekiram ungalai contact pannuvanga. Porumaikku nandri. 🙏';
+  }
+  return 'Our sales team has your request and will contact you shortly. Thank you for your patience. 🙏';
 }
 
 /**
@@ -507,15 +642,78 @@ export const handleIncomingMessage = async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // 3. Is conversation paused / taken over by human?
-      if (convStatus === 'handover') {
-        console.log(`[Webhook] Customer ${customerId} conversation is in human takeover mode. Skipping auto-reply.`);
-        return res.sendStatus(200);
-      }
-
       // 4. Does incoming message have readable text?
       if (!msgText || !msgText.trim()) {
         console.log(`[Webhook] Incoming message is non-text (${msg.type}). Skipping auto-reply.`);
+        return res.sendStatus(200);
+      }
+
+      // Fetch last 3 customer messages and customer's saved language for context
+      const { rows: pastCustomerRows } = await pool.query(
+        `SELECT content FROM messages 
+         WHERE customer_id = $1 AND sender = 'customer' AND id != $2 
+         ORDER BY timestamp DESC LIMIT 3`,
+        [customerId, msgId]
+      );
+      const pastCustomerMsgs = pastCustomerRows.map(r => r.content);
+
+      const { rows: custLangRows } = await pool.query(
+        'SELECT language FROM customers WHERE id = $1',
+        [customerId]
+      );
+      const savedCustLang = custLangRows[0]?.language;
+
+      // Resolve language using conversation-level rules
+      const resolvedLang = resolveConversationLanguage(msgText, pastCustomerMsgs, savedCustLang);
+      const isLanguageComplaint = LANGUAGE_COMPLAINT_ENGLISH_REGEX.test(msgText);
+
+      // Save/update resolved language in DB
+      await pool.query(
+        'UPDATE customers SET language = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [resolvedLang, customerId]
+      );
+
+      // 3. Is conversation paused / taken over by human (handover mode)?
+      if (convStatus === 'handover') {
+        console.log(`[Webhook] Customer ${customerId} conversation is in handover mode. Checking 30-min holding reply throttle.`);
+
+        // Check if a holding reply has been sent in the last 30 minutes
+        const { rows: recentHolding } = await pool.query(
+          `SELECT id, timestamp FROM messages 
+           WHERE customer_id = $1 
+             AND sender = 'holding' 
+             AND timestamp >= NOW() - INTERVAL '30 minutes' 
+           ORDER BY timestamp DESC LIMIT 1`,
+          [customerId]
+        );
+
+        if (recentHolding.length > 0) {
+          console.log(`[Webhook] Handover holding reply already sent within last 30 minutes (at ${recentHolding[0].timestamp}). Staying silent.`);
+          return res.sendStatus(200);
+        }
+
+        // Send ONE short holding reply per 30 minutes in customer's language
+        const holdingReply = getHoldingReplyText(resolvedLang, isLanguageComplaint);
+        console.log(`[Webhook] Dispatching handover holding reply in ${resolvedLang} to ${customerId}: "${holdingReply}"`);
+
+        const sendResult = await sendWhatsAppMessage(
+          senderPhone,
+          holdingReply,
+          receivingPhoneNumberId,
+          connection.access_token
+        );
+
+        if (sendResult.success) {
+          const holdingMsgId = sendResult.messages?.[0]?.id || `hold_${crypto.randomUUID()}`;
+          await pool.query(
+            'INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id) VALUES ($1, $2, $3, $4, $5, $6)',
+            [holdingMsgId, customerId, 'holding', holdingReply, 'sent', receivingPhoneNumberId]
+          );
+          await pool.query(
+            'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+            [convId]
+          );
+        }
         return res.sendStatus(200);
       }
 
@@ -526,11 +724,11 @@ export const handleIncomingMessage = async (req, res) => {
 
       // 4.1 Fast Human Handover Request Check (Highest priority - customer needs person/BDE)
       if (HUMAN_HANDOVER_REGEX.test(msgText.trim())) {
-        replyText = getHandoverReplyText(msgText);
+        replyText = getHandoverReplyText(msgText, resolvedLang);
         intent = 'Human Request';
         isImportant = true;
 
-        console.log(`[Webhook] Fast regex human handover requested by customer ${customerId} ("${msgText}"). Activating handover mode.`);
+        console.log(`[Webhook] Fast regex human handover requested by customer ${customerId} ("${msgText}"). Language: ${resolvedLang}. Activating handover mode.`);
 
         // Auto-assign to an active BDE via round-robin
         const assignedBde = await autoAssignBdeToCustomer(customerId);
@@ -598,11 +796,23 @@ export const handleIncomingMessage = async (req, res) => {
 
       // 4.5 Natural Acknowledgement & Gratitude Check
       if (!replyText && ACKNOWLEDGEMENT_REGEX.test(msgText.trim())) {
-        replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
-        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation.`);
+        if (resolvedLang === 'tamil') {
+          replyText = 'சரிங்க! ஏதேனும் சந்தேகம் அல்லது விவரங்கள் தேவைப்பட்டால் தயங்காமல் கேளுங்கள். 👍';
+        } else if (resolvedLang === 'tanglish') {
+          replyText = 'Seri! Ungalukku edhavadhu doubts or quotation venum na sollunga. 👍';
+        } else {
+          replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
+        }
+        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation in ${resolvedLang}.`);
       } else if (!replyText && THANKS_REGEX.test(msgText.trim())) {
-        replyText = "You're welcome! Feel free to reach out anytime. 👍";
-        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply.`);
+        if (resolvedLang === 'tamil') {
+          replyText = 'மகிழ்ச்சி! எப்போது வேண்டுமானாலும் தொடர்பு கொள்ளுங்கள். 👍';
+        } else if (resolvedLang === 'tanglish') {
+          replyText = 'Welcome! Eppovum contact pannunga. 👍';
+        } else {
+          replyText = "You're welcome! Feel free to reach out anytime. 👍";
+        }
+        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply in ${resolvedLang}.`);
       }
 
       // 4.6 RFQ / Detailed Quotation Enquiry Check
@@ -626,8 +836,8 @@ export const handleIncomingMessage = async (req, res) => {
 
       // 4.8 Gemini AI Fallback for RFQs and Unmatched Messages (NEVER welcome message)
       if (!replyText) {
-        console.log(`[Webhook] Unmatched / RFQ message: "${msgText}". Routing to Gemini AI service...`);
-        const aiResponse = await generateAiReply(customerId, msgText);
+        console.log(`[Webhook] Unmatched / RFQ message: "${msgText}". Routing to Gemini AI service (hint: ${resolvedLang})...`);
+        const aiResponse = await generateAiReply(customerId, msgText, resolvedLang);
         replyText = aiResponse.reply_text;
         intent = aiResponse.intent;
         isImportant = aiResponse.is_important;
