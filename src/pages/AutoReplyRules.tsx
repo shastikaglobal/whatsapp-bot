@@ -49,6 +49,8 @@ export default function AutoReplyRules() {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Rule form state
@@ -65,6 +67,24 @@ export default function AutoReplyRules() {
     fetchAll();
   }, []);
 
+  const fetchSettings = async () => {
+    try {
+      setSettingsLoadError(null);
+      const settingsRes = await api.get('/settings');
+      if (settingsRes?.data && typeof settingsRes.data === 'object' && Object.keys(settingsRes.data).length > 0) {
+        setSettings(settingsRes.data);
+        setSettingsLoaded(true);
+      } else {
+        throw new Error('Received empty or invalid settings object');
+      }
+    } catch (err: any) {
+      console.error('Failed to load settings', err);
+      setSettingsLoaded(false);
+      setSettingsLoadError('Failed to load greeting messages from server. Saving is locked to protect your messages.');
+      showToast('Could not load greeting messages from server. Please retry.', 'error');
+    }
+  };
+
   const fetchAll = async () => {
     setLoading(true);
     try {
@@ -76,16 +96,8 @@ export default function AutoReplyRules() {
       console.error('Failed to load rules', err);
     }
 
-    try {
-      const settingsRes = await api.get('/settings');
-      if (settingsRes?.data) {
-        setSettings(settingsRes.data);
-      }
-    } catch (err) {
-      console.error('Failed to load settings', err);
-    } finally {
-      setLoading(false);
-    }
+    await fetchSettings();
+    setLoading(false);
   };
 
   const handleSettingChange = (key: string, value: string) => {
@@ -93,6 +105,9 @@ export default function AutoReplyRules() {
   };
 
   const saveSettings = async () => {
+    if (!settingsLoaded) {
+      return showToast('Settings have not loaded successfully yet. Cannot save.', 'error');
+    }
     setSaving(true);
     try {
       await api.put('/settings', settings);
@@ -240,7 +255,12 @@ export default function AutoReplyRules() {
         <div className="panel-card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-800">Auto-Reply Engine</h2>
-            <button onClick={saveSettings} disabled={saving} className="btn-save-primary">
+            <button 
+              onClick={saveSettings} 
+              disabled={saving || !settingsLoaded} 
+              title={!settingsLoaded ? "Settings must load successfully before saving" : "Save All"}
+              className={`btn-save-primary ${(!settingsLoaded || saving) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
               <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save All'}
             </button>
           </div>
@@ -294,8 +314,36 @@ export default function AutoReplyRules() {
 
         {/* Greeting Messages */}
         <div className="panel-card">
-          <h2 className="text-lg font-bold text-slate-800 mb-1">Greeting Messages</h2>
-          <p className="text-sm text-slate-500 mb-4">Configure automatic messages for customers.</p>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">Greeting Messages</h2>
+              <p className="text-sm text-slate-500">Configure automatic messages for customers.</p>
+            </div>
+            {settingsLoaded ? (
+              <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Loading...
+              </span>
+            )}
+          </div>
+
+          {settingsLoadError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{settingsLoadError}</span>
+              </div>
+              <button 
+                onClick={fetchSettings} 
+                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold transition-colors shrink-0"
+              >
+                Retry Loading
+              </button>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>
@@ -371,6 +419,10 @@ export default function AutoReplyRules() {
                 placeholder="Thanks for reaching out! 🕐 We're currently outside of business hours. We'll get back to you as soon as possible."
                 className="w-full h-20 p-3 border border-slate-200/90 rounded-xl text-sm bg-white/80 backdrop-blur-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none shadow-2xs"
               />
+              <div className="mt-1.5 flex items-center justify-between text-xs text-slate-500 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200/60">
+                <span>Configured Working Hours: <strong className="text-slate-800">{settings.business_hours || '24 hours'}</strong></span>
+                <span className="text-[11px] text-slate-400">Outside these hours, this reply is sent</span>
+              </div>
             </div>
 
             <div>
@@ -400,7 +452,12 @@ export default function AutoReplyRules() {
           </div>
 
           <div className="flex justify-end mt-4">
-            <button onClick={saveSettings} disabled={saving} className="btn-save-primary">
+            <button 
+              onClick={saveSettings} 
+              disabled={saving || !settingsLoaded} 
+              title={!settingsLoaded ? "Settings must load successfully before saving" : "Save Messages"}
+              className={`btn-save-primary ${(!settingsLoaded || saving) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
               <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Messages'}
             </button>
           </div>
