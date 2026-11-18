@@ -42,11 +42,12 @@ export default function Layout() {
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
       <main className="flex-1 flex flex-col min-w-0 galaxy-main-area relative overflow-hidden">
         
-        {/* Ambient Cosmic Starlight & Nebula Globs */}
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.03] pointer-events-none z-0"></div>
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none z-0"></div>
-        <div className="absolute top-1/3 -right-32 w-96 h-96 bg-emerald-500/12 rounded-full blur-3xl pointer-events-none z-0"></div>
-        <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none z-0"></div>
+        {/* Ambient Cosmic Starlight & Vivid Nebula Globs (Luminous behind Frosted Glass) */}
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.045] pointer-events-none z-0"></div>
+        <div className="absolute -top-32 -left-32 w-[520px] h-[520px] bg-indigo-500/30 rounded-full blur-[110px] pointer-events-none z-0"></div>
+        <div className="absolute top-1/4 -right-32 w-[500px] h-[500px] bg-purple-500/28 rounded-full blur-[110px] pointer-events-none z-0"></div>
+        <div className="absolute bottom-1/4 left-1/4 w-[520px] h-[520px] bg-cyan-500/22 rounded-full blur-[110px] pointer-events-none z-0"></div>
+        <div className="absolute -bottom-32 right-1/4 w-[480px] h-[480px] bg-emerald-500/22 rounded-full blur-[110px] pointer-events-none z-0"></div>
 
         {/* Galaxy Main Bar Header */}
         <header className="glass-nav-header flex items-center justify-between shrink-0 relative z-30">

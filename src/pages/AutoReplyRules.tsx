@@ -319,7 +319,7 @@ export default function AutoReplyRules() {
                 value={settings.welcome_message || ''}
                 onChange={(e) => handleSettingChange('welcome_message', e.target.value)}
                 placeholder="Hello! 👋 Welcome to our store. How can we help you today?"
-                className="w-full h-20 p-3 border border-slate-300 rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                className="w-full h-20 p-3 border border-slate-200/90 rounded-xl text-sm bg-white/80 backdrop-blur-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none shadow-2xs"
               />
             </div>
 
@@ -344,7 +344,7 @@ export default function AutoReplyRules() {
                 value={settings.first_time_greeting || ''}
                 onChange={(e) => handleSettingChange('first_time_greeting', e.target.value)}
                 placeholder="Hi there! 🎉 We're glad to have you as a new customer. How can we assist you?"
-                className="w-full h-20 p-3 border border-slate-300 rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                className="w-full h-20 p-3 border border-slate-200/90 rounded-xl text-sm bg-white/80 backdrop-blur-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none shadow-2xs"
               />
             </div>
 
@@ -369,7 +369,7 @@ export default function AutoReplyRules() {
                 value={settings.outside_hours_reply || ''}
                 onChange={(e) => handleSettingChange('outside_hours_reply', e.target.value)}
                 placeholder="Thanks for reaching out! 🕐 We're currently outside of business hours. We'll get back to you as soon as possible."
-                className="w-full h-20 p-3 border border-slate-300 rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                className="w-full h-20 p-3 border border-slate-200/90 rounded-xl text-sm bg-white/80 backdrop-blur-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none shadow-2xs"
               />
             </div>
 
@@ -394,7 +394,7 @@ export default function AutoReplyRules() {
                 value={settings.holiday_reply || ''}
                 onChange={(e) => handleSettingChange('holiday_reply', e.target.value)}
                 placeholder="Happy holidays! 🎄 Our team is currently on holiday. We'll respond when we return."
-                className="w-full h-20 p-3 border border-slate-300 rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                className="w-full h-20 p-3 border border-slate-200/90 rounded-xl text-sm bg-white/80 backdrop-blur-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none shadow-2xs"
               />
             </div>
           </div>
@@ -455,9 +455,9 @@ export default function AutoReplyRules() {
 
           {/* Rules List */}
           {rules.length === 0 ? (
-            <div className="text-center p-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
-              <Bot className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 text-sm mb-4">No keyword rules configured yet.</p>
+            <div className="text-center p-8 border-2 border-dashed border-slate-300/60 rounded-xl bg-white/40 backdrop-blur-sm">
+              <Bot className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+              <p className="text-slate-600 text-sm mb-4 font-medium">No keyword rules configured yet.</p>
               <button onClick={openCreateForm} className="pill-button bg-white shadow-sm hover:shadow-md">
                 <Plus className="w-4 h-4 text-brand-600" /> Create First Rule
               </button>
@@ -468,7 +468,7 @@ export default function AutoReplyRules() {
                 <div
                   key={rule.id}
                   className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
-                    rule.is_active ? 'bg-white border-slate-200 hover:border-emerald-300' : 'bg-slate-50 border-slate-100 opacity-60'
+                    rule.is_active ? 'bg-white/80 backdrop-blur-xs border-slate-200/90 hover:border-emerald-400 shadow-2xs' : 'bg-white/40 border-slate-100 opacity-60'
                   }`}
                 >
                   <div className="text-xs font-bold text-slate-400 w-6 text-center shrink-0">#{index + 1}</div>
