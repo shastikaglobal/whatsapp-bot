@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, Sparkles, Smile, Hand, Briefcase, CheckCircle2 } from 'lucide-react';
+import { Search, X, Smile, Flower2, Coffee, Car, Lightbulb, Percent, Flag, Sticker } from 'lucide-react';
 
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
@@ -9,287 +9,305 @@ interface EmojiPickerProps {
 interface EmojiCategory {
   id: string;
   name: string;
-  icon: string;
-  emojis: { char: string; name: string }[];
+  emojis: string[];
 }
 
-const EMOJI_CATEGORIES: EmojiCategory[] = [
-  {
-    id: 'frequent',
-    name: 'Popular & Reactions',
-    icon: '🌟',
-    emojis: [
-      { char: '👍', name: 'thumbs up ok agree' },
-      { char: '🤝', name: 'handshake deal partner' },
-      { char: '🙏', name: 'folded hands thank you please vanakkam' },
-      { char: '😊', name: 'smiling blush happy' },
-      { char: '❤️', name: 'heart love' },
-      { char: '😂', name: 'joy laugh tears' },
-      { char: '👏', name: 'clapping applause' },
-      { char: '✨', name: 'sparkles star' },
-      { char: '🔥', name: 'fire hot fast' },
-      { char: '💯', name: 'hundred perfect quality' },
-      { char: '✅', name: 'check verified done' },
-      { char: '📞', name: 'call phone speak' }
-    ]
-  },
-  {
-    id: 'produce',
-    name: 'Agri & Export Produce',
-    icon: '🥥',
-    emojis: [
-      { char: '🥥', name: 'coconut mature semi husked' },
-      { char: '🍌', name: 'banana cavendish fresh' },
-      { char: '🍉', name: 'watermelon melon fruit' },
-      { char: '🎃', name: 'pumpkin vegetable' },
-      { char: '🥒', name: 'cucumber gherkin' },
-      { char: '🥭', name: 'mango alphonso fruit' },
-      { char: '🍍', name: 'pineapple fruit' },
-      { char: '🥑', name: 'avocado' },
-      { char: '🍋', name: 'lemon lime' },
-      { char: '🌾', name: 'grain rice wheat agriculture' },
-      { char: '🌱', name: 'seedling plant fresh organic' },
-      { char: '🌴', name: 'palm tree coconut farm' },
-      { char: '📦', name: 'package box carton carton packing' },
-      { char: '🚢', name: 'ship vessel container cif fob sea freight' },
-      { char: '✈️', name: 'airplane air freight cargo' },
-      { char: '🚛', name: 'truck lorry transport delivery' }
-    ]
-  },
+const CATEGORIES: EmojiCategory[] = [
   {
     id: 'smileys',
-    name: 'Smileys & Emotion',
-    icon: '😀',
+    name: 'Smileys & People',
     emojis: [
-      { char: '😀', name: 'grinning face smile' },
-      { char: '😃', name: 'smiley happy' },
-      { char: '😄', name: 'smile happy joy' },
-      { char: '😁', name: 'beam grin' },
-      { char: '😆', name: 'laugh closed eyes' },
-      { char: '😅', name: 'sweat smile relief' },
-      { char: '🤣', name: 'rofl rolling floor laughing' },
-      { char: '😂', name: 'joy crying laughing' },
-      { char: '🙂', name: 'slight smile' },
-      { char: '🙃', name: 'upside down' },
-      { char: '😉', name: 'wink' },
-      { char: '😊', name: 'blush warm' },
-      { char: '😇', name: 'halo angel innocent' },
-      { char: '🥰', name: 'love hearts smile' },
-      { char: '😍', name: 'heart eyes love' },
-      { char: '🤩', name: 'star eyes excited' },
-      { char: '😘', name: 'blow kiss' },
-      { char: '😋', name: 'yum delicious' },
-      { char: '😜', name: 'wink tongue' },
-      { char: '🤪', name: 'zany goofy' },
-      { char: '🤗', name: 'hugging open hands' },
-      { char: '🤔', name: 'thinking question idea' },
-      { char: '🤫', name: 'shushing secret' },
-      { char: '🤭', name: 'giggle hand over mouth' },
-      { char: '🥳', name: 'party celebrate' },
-      { char: '😎', name: 'sunglasses cool' },
-      { char: '😌', name: 'relieved calm' }
+      '😀', '😃', '😄', '😁', '😆', '🥹', '😅', '😂', '🤣', '🥲', '☺️', '😊',
+      '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋',
+      '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🫢', '🤫', '🤔', '🫡', '🤐',
+      '🤨', '😐', '😑', '😶', '🫥', '😶‍🌫️', '😏', '😒', '🙄', '😬', '😮‍💨', '🤥',
+      '🫨', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵',
+      '🥶', '🥴', '😵', '😵‍💫', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕',
+      '😟', '🙁', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥',
+      '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡',
+      '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽',
+      '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾',
+      '👋', '🤚', '🖐️', '✋', '🖖', '🫱', '🫲', '🫳', '🫴', '🫵', '👌', '🤌',
+      '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇',
+      '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '🫶', '👐', '🤲',
+      '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦵', '🦶', '👂', '🦻', '👃', '🧠',
+      '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄', '🫦', '👤', '👥', '🫂'
     ]
   },
   {
-    id: 'gestures',
-    name: 'Hands & People',
-    icon: '🖐️',
+    id: 'animals',
+    name: 'Animals & Nature',
     emojis: [
-      { char: '👍', name: 'thumbs up approve yes ok' },
-      { char: '👎', name: 'thumbs down no' },
-      { char: '👏', name: 'clap applause good job' },
-      { char: '🤝', name: 'handshake deal contract partner agree' },
-      { char: '🙏', name: 'folded hands pray thank you namaste vanakkam' },
-      { char: '✌️', name: 'peace victory' },
-      { char: '🤞', name: 'crossed fingers hope luck' },
-      { char: '🖐️', name: 'hand splayed five' },
-      { char: '✋', name: 'raised hand stop' },
-      { char: '👌', name: 'ok hand perfect' },
-      { char: '👈', name: 'point left' },
-      { char: '👉', name: 'point right this' },
-      { char: '👆', name: 'point up above' },
-      { char: '👇', name: 'point down below link' },
-      { char: '✍️', name: 'writing hand note signing' },
-      { char: '💪', name: 'muscle strong quality' },
-      { char: '👋', name: 'wave hello bye' },
-      { char: '🫡', name: 'salute respect noted' }
+      '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮',
+      '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤',
+      '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🪱',
+      '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🕸️',
+      '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡',
+      '🐠', '🐟', '🐬', '🐳', '🐋', '鲨', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧',
+      '🦣', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🦬', '🐃', '🐂', '🐄',
+      '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐈', '🐈‍⬛',
+      '🪶', '🐓', '🦃', '🦤', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨',
+      '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔', '🐾', '🌵', '🎄', '🌲',
+      '🌳', '🌴', '🪵', '🌱', '🌿', '☘️', '🍀', '🎍', '🪴', '🎋', '🍃', '🍂',
+      '🍁', '🍄', '🌾', '💐', '🌷', '🌹', '🥀', '🌺', '🌸', '🌼', '🌻', '🌞',
+      '🌝', '🌛', '🌜', '🌚', '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔',
+      '🌙', '🌎', '🌍', '🌏', '🪐', '💫', '⭐️', '🌟', '✨', '⚡️', '☄️', '💥',
+      '🔥', '🌪️', '🌈', '☀️', '🌤️', '⛅️', '🌥️', '☁️', '🌦️', '🌧️', '⛈️', '🌩️',
+      '🌨️', '❄️', '☃️', '⛄️', '🌬️', '💨', '💧', '💦', '🫧', '☔️', '☂️', '🌊'
     ]
   },
   {
-    id: 'business',
-    name: 'Business & Trade',
-    icon: '💼',
+    id: 'food',
+    name: 'Food & Drink',
     emojis: [
-      { char: '📞', name: 'telephone call contact' },
-      { char: '📱', name: 'mobile phone whatsapp' },
-      { char: '💬', name: 'speech bubble chat message' },
-      { char: '✉️', name: 'envelope email quotation' },
-      { char: '💼', name: 'briefcase business professional bde' },
-      { char: '📋', name: 'clipboard document quotation rfq specs' },
-      { char: '📊', name: 'bar chart analytics report' },
-      { char: '📈', name: 'chart upward growth sales' },
-      { char: '💰', name: 'money bag price cost quote' },
-      { char: '💵', name: 'dollar currency payment cash' },
-      { char: '🏷️', name: 'label tag price moq' },
-      { char: '🏢', name: 'office building company headquarters' },
-      { char: '🏬', name: 'department store warehouse' },
-      { char: '📍', name: 'pin location address port origin destination' },
-      { char: '⏰', name: 'clock time delivery schedule' },
-      { char: '⏳', name: 'hourglass pending processing' },
-      { char: '🧾', name: 'receipt invoice proforma' }
+      '🥥', '🍌', '🍉', '🍇', '🍈', '🍊', '🍋', '🍍', '🥭', '🍎', '🍏', '🍐',
+      '🍑', '🍒', '🍓', '🫐', '🥝', '🍅', '🫒', '🥑', '🍆', '🥔', '🥕', '🌽',
+      '🌶️', '🫑', '🥒', '🥬', '🥦', '🧄', '🧅', '🥜', '🫘', '🌰', '🍞', '🥐',
+      '🥖', '🫓', '🥨', '🥯', '🥞', '🧇', '🧀', '🍖', '🍗', '🥩', '🥓', '🍔',
+      '🍟', '🍕', '🌭', '🥪', '🌮', '🌯', '🫔', '🥙', '🧆', '🥚', '🍳', '🥘',
+      '🍲', '🫕', '🥣', '🥗', '🍿', '🧈', '🧂', '🥫', '🍱', '🍘', '🍙', '🍚',
+      '🍛', '🍜', '🍝', '🍠', '🍢', '🍣', '🍤', '🍥', '🥮', '🍡', '🥟', '🥠',
+      '🥡', '🍦', '🍧', '🍨', '🍩', '🍪', '🎂', '🍰', '🧁', '🥧', '🍫', '🍬',
+      '🍭', '🍮', '🍯', '🍼', '🥛', '☕️', '🫖', '🍵', '🍶', '🍾', '🍷', '🍸',
+      '🍹', '🍺', '🍻', '🥂', '🥃', '🫗', '🥤', '🧋', '🧃', '🧉', '🧊', '🍽️'
+    ]
+  },
+  {
+    id: 'activities',
+    name: 'Activities',
+    emojis: [
+      '⚽️', '🏀', '🏈', '⚾️', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓',
+      '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳️', '🪁', '🏹', '🎣', '🤿',
+      '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', '🥌', '🎿', '⛷️', '🏂', '🪂',
+      '🏋️', '🤼', '🤸', '⛹️', '🤺', '🤾', '🏌️', '🏇', '🧘', '🏄', '🏊', '🤽',
+      '🚣', '🧗', '🚵', '🚴', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '🏵️', '🎗️',
+      '🎫', '🎟️', '🎪', '🤹', '🎭', '🩰', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹',
+      '🥁', '🪘', '🎷', '🎺', '🪗', '🎸', '🪕', '🎻', '🎲', '♟️', '🎯', '🎳',
+      '🎮', '🎰', '🧩'
+    ]
+  },
+  {
+    id: 'travel',
+    name: 'Travel & Places',
+    emojis: [
+      '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚',
+      '🚛', '🚜', '🦯', '🦽', '🦼', '🛴', '🚲', '🛵', '🏍️', '🛺', '🚨', '🚔',
+      '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', '🚅',
+      '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️',
+      '🚀', '🛸', '🚁', '🛶', '⛵️', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓️', '🛟',
+      '⛽️', '🚧', '🚦', '🚥', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡',
+      '🎢', '🎠', '⛲️', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🏕️', '⛺️',
+      '🏠', '🏡', '🏢', '🏣', '🏤', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬',
+      '🏭', '💒', '⛪️', '🕌', '🛕', '🕍', '⛩️', '🕋'
+    ]
+  },
+  {
+    id: 'objects',
+    name: 'Objects',
+    emojis: [
+      '⌚️', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '💽', '💾', '💿', '📀',
+      '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻',
+      '🎙️', '⏱️', '⏲️', '⏰', '🕰️', '⌛️', '⏳', '📡', '🔋', '🪫', '🔌', '💡',
+      '🔦', '🕯️', '🪔', '🧯', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳',
+      '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨', '🛠️', '⛏️', '🪚', '🔩', '⚙️',
+      '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', '🛡️', '🔮',
+      '🧿', '🪬', '💈', '⚗️', '🔭', '🔬', '🩹', '🩺', '💊', '💉', '🩸', '🌡️',
+      '🧹', '🧺', '🧻', '🧼', '🪥', '🔑', '🗝️', '🚪', '🪑', '🛋️', '🛏️', '🛍️',
+      '🛒', '🎁', '🎈', '🎉', '🎊', '✉️', '📩', '📨', '📧', '💌', '📦', '🏷️',
+      '📪', '📫', '📬', '📭', '📮', '📜', '📃', '📄', '📑', '🧾', '📊', '📈',
+      '📉', '🗒️', '🗓️', '📅', '📆', '📋', '📁', '📂', '🗂️', '🗞️', '📰', '📓',
+      '📕', '📗', '📘', '📙', '📚', '📖', '🔖', '🔗', '📎', '🖇️', '📐', '📏',
+      '📌', '📍', '✂️', '🖊️', '🖋️', '✒️', '📝', '✏️', '🔍', '🔎', '🔒', '🔓'
     ]
   },
   {
     id: 'symbols',
-    name: 'Status & Symbols',
-    icon: '⚡',
+    name: 'Symbols',
     emojis: [
-      { char: '✅', name: 'check green verified confirm ok' },
-      { char: '❌', name: 'cross cancel reject no' },
-      { char: '⚠️', name: 'warning alert attention' },
-      { char: '❓', name: 'question mark enquiry' },
-      { char: '❗', name: 'exclamation important urgent' },
-      { char: '💡', name: 'lightbulb idea tip' },
-      { char: '🎯', name: 'target goal accuracy' },
-      { char: '⭐', name: 'star favorite rating' },
-      { char: '🌟', name: 'glowing star premium' },
-      { char: '💯', name: 'hundred percent best' },
-      { char: '🆗', name: 'ok button confirm' },
-      { char: '🆒', name: 'cool' },
-      { char: '🆕', name: 'new arrival fresh' },
-      { char: '🟢', name: 'green circle active available' },
-      { char: '🔴', name: 'red circle offline closed' },
-      { char: '🟡', name: 'yellow circle waiting' }
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕',
+      '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️',
+      '✡️', '☯️', '☦️', '🆔', '♾️', '☢️', '☣️', '📴', '📳', '✴️', '🆚', '💮',
+      '🉐', '㊙️', '㊗️', '🈴', '🅰️', '🅱️', '🆎', '🆑', '🅾️', '🆘', '❌', '⭕️',
+      '🛑', '⛔️', '📛', '🚫', '💯', '💢', '♨️', '🚷', '🚯', '🚳', '🔞', '📵',
+      '❗️', '❕', '❓', '❔', '‼️', '⁉️', '🔅', '🔆', '⚠️', '🚸', '🔱', '⚜️',
+      '🔰', '♻️', '✅', '🈯️', '❇️', '✳️', '❎', '🌐', '💠', '💤', '🏧', '🚾',
+      '♿️', '🅿️', '🛂', '🛃', '🛄', '🛅', '🚹', '🚺', '🚼', '🚻', '🚮', '📶',
+      '🈁', '🆖', '🆗', '🆙', '🆒', '🆕', '🆓', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣',
+      '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '🔢', '#️⃣', '*️⃣', '▶️', '⏸️',
+      '⏯️', '⏹️', '⏺️', '⏭️', '⏮️', '⏩', '⏪', '◀️', '🔼', '🔽', '➡️', '⬅️',
+      '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', '↔️', '↪️', '↩️', '⤴️', '⤵️',
+      '🔀', '🔁', '🔂', '🔄', '🔃', '🎵', '🎶', '➕', '➖', '➗', '✖️', '🟰',
+      '💲', '💱', '™️', '©️', '®️', '✔️', '☑️', '🔘', '🔴', '🟠', '🟡', '🟢',
+      '🔵', '🟣', '⚫️', '⚪️', '🟤', '🔺', '🔻', '🔸', '🔹', '🔶', '🔷', '▪️',
+      '▫️', '◾️', '◽️', '◼️', '◻️', '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '⬛️',
+      '⬜️', '🟫', '🔈', '🔇', '🔉', '🔊', '🔔', '🔕', '📣', '📢', '💬', '💭'
+    ]
+  },
+  {
+    id: 'flags',
+    name: 'Flags',
+    emojis: [
+      '🏳️', '🏴', '🏁', '🚩', '🏳️‍🌈', '🏳️‍⚧️', '🏴‍☠️', '🇮🇳', '🇺🇸', '🇦🇪', '🇸🇦', '🇸🇬',
+      '🇲🇾', '🇬🇧', '🇨🇦', '🇦🇺', '🇩🇪', '🇫🇷', '🇯🇵', '🇨🇳', '🇧🇷', '🇿🇦', '🇮🇩', '🇷🇺',
+      '🇰🇷', '🇮🇹', '🇪🇸', '🇹🇷', '🇳🇱', '🇻🇳', '🇧🇩', '🇵🇰', '🇱🇰', '🇳🇵', '🇴🇲', '🇶🇦',
+      '🇰🇼', '🇧🇭', '🇪🇬', '🇲🇽', '🇳🇿', '🇿🇼'
     ]
   }
 ];
 
-export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
-  const [activeTab, setActiveTab] = useState('frequent');
-  const [search, setSearch] = useState('');
-  const pickerRef = useRef<HTMLDivElement>(null);
+export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) => {
+  const [activeCategory, setActiveCategory] = useState<string>('smileys');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'emoji' | 'gif' | 'sticker'>('emoji');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Close when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [onClose]);
 
-  // Filter emojis if searching
-  const filteredEmojis = search.trim()
-    ? EMOJI_CATEGORIES.flatMap(cat => cat.emojis).filter(e => 
-        e.name.toLowerCase().includes(search.toLowerCase().trim()) || e.char.includes(search.trim())
-      )
-    : null;
+  // Scroll to section when category icon clicked
+  const handleCategoryClick = (catId: string) => {
+    setActiveCategory(catId);
+    setSearchQuery('');
+    const target = sectionRefs.current[catId];
+    if (target && scrollContainerRef.current) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Filter emojis when search query is entered
+  const filteredCategories = searchQuery.trim()
+    ? CATEGORIES.map(cat => ({
+        ...cat,
+        emojis: cat.emojis.filter(emoji => emoji.includes(searchQuery.trim()))
+      })).filter(cat => cat.emojis.length > 0)
+    : CATEGORIES;
+
+  // Top navigation category icon renderer
+  const renderCategoryIcon = (id: string) => {
+    const iconClass = "w-5 h-5";
+    switch (id) {
+      case 'smileys':
+        return <Smile className={iconClass} />;
+      case 'animals':
+        return <Flower2 className={iconClass} />;
+      case 'food':
+        return <Coffee className={iconClass} />;
+      case 'activities':
+        return (
+          <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M4.93 4.93a10 10 0 0 0 14.14 14.14" />
+            <path d="M19.07 4.93a10 10 0 0 0-14.14 14.14" />
+            <path d="M2 12h20" />
+            <path d="M12 2v20" />
+          </svg>
+        );
+      case 'travel':
+        return <Car className={iconClass} />;
+      case 'objects':
+        return <Lightbulb className={iconClass} />;
+      case 'symbols':
+        return <Percent className={iconClass} />;
+      case 'flags':
+        return <Flag className={iconClass} />;
+      default:
+        return <Smile className={iconClass} />;
+    }
+  };
 
   return (
-    <div 
-      ref={pickerRef}
-      className="absolute bottom-full mb-3 left-0 sm:left-2 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_15px_45px_rgba(0,0,0,0.25),0_0_15px_rgba(0,0,0,0.06)] border border-slate-200 z-50 overflow-hidden flex flex-col max-h-[380px] animate-in fade-in zoom-in-95 duration-150"
+    <div
+      ref={containerRef}
+      className="absolute bottom-full mb-3 left-0 w-[420px] max-w-[calc(100vw-32px)] sm:w-[460px] bg-white rounded-2xl shadow-2xl border border-[#e9edef] z-50 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150 select-none text-slate-800"
+      style={{ height: '430px' }}
+      onClick={e => e.stopPropagation()}
     >
-      {/* Search Header */}
-      <div className="p-2.5 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
-        <div className="relative flex-1">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search emojis (e.g. coconut, deal, hand)..."
-            className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            autoFocus
-          />
-          {search && (
-            <button 
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-        <button 
-          onClick={onClose}
-          className="text-slate-400 hover:text-slate-700 p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-          title="Close emoji picker"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Category Tabs (shown when not searching) */}
-      {!search.trim() && (
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100 bg-slate-50/70 overflow-x-auto text-xs shrink-0">
-          {EMOJI_CATEGORIES.map(cat => (
+      {/* 1. Top Category Bar (Exact WhatsApp Web style with green active indicator) */}
+      <div className="grid grid-cols-8 border-b border-[#e9edef] px-2 pt-1 shrink-0 bg-white">
+        {CATEGORIES.map(cat => {
+          const isActive = activeCategory === cat.id && !searchQuery;
+          return (
             <button
               key={cat.id}
-              onClick={() => setActiveTab(cat.id)}
-              className={`px-2.5 py-1 rounded-lg text-sm transition-all flex items-center gap-1 ${
-                activeTab === cat.id 
-                  ? 'bg-emerald-100/70 text-emerald-800 font-bold shadow-2xs' 
-                  : 'text-slate-500 hover:bg-slate-200/60 hover:text-slate-800'
+              type="button"
+              onClick={() => handleCategoryClick(cat.id)}
+              className={`relative py-3 flex items-center justify-center transition-colors cursor-pointer ${
+                isActive ? 'text-[#00a884]' : 'text-[#54656f] hover:text-[#111b21]'
               }`}
               title={cat.name}
             >
-              <span>{cat.icon}</span>
+              {renderCategoryIcon(cat.id)}
+              {isActive && (
+                <div className="absolute bottom-0 left-2 right-2 h-[3px] bg-[#00a884] rounded-t-full" />
+              )}
             </button>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
 
-      {/* Emoji Grid Area */}
-      <div className="flex-1 overflow-y-auto p-3 max-h-64 divide-y divide-slate-100">
-        {filteredEmojis ? (
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-              Search Results ({filteredEmojis.length})
-            </div>
-            {filteredEmojis.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                No matching emojis found for "{search}"
-              </div>
-            ) : (
-              <div className="grid grid-cols-7 sm:grid-cols-8 gap-1.5">
-                {filteredEmojis.map((e, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      onSelect(e.char);
-                    }}
-                    className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-emerald-50 hover:scale-125 transition-all select-none cursor-pointer"
-                    title={e.name}
-                  >
-                    {e.char}
-                  </button>
-                ))}
-              </div>
-            )}
+      {/* 2. Search Bar (Exact WhatsApp Web rounded pill with green border) */}
+      <div className="px-4 pt-3 pb-2 shrink-0 bg-white">
+        <div className="relative flex items-center border-2 border-[#00a884] rounded-full px-3.5 py-1.5 bg-white shadow-2xs">
+          <Search className="w-4 h-4 text-[#54656f] shrink-0 mr-2.5" />
+          <input
+            type="text"
+            placeholder="Search emoji"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none"
+            autoFocus={false}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-[#54656f] hover:text-[#111b21] p-0.5 ml-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Scrollable Emoji Grid Area */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-4 py-2 space-y-4 custom-scrollbar bg-white"
+      >
+        {filteredCategories.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8696a0]">
+            <p className="text-sm font-medium">No emoji found</p>
           </div>
         ) : (
-          EMOJI_CATEGORIES.filter(cat => cat.id === activeTab).map(cat => (
-            <div key={cat.id}>
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <span>{cat.icon}</span>
-                <span>{cat.name}</span>
-              </div>
-              <div className="grid grid-cols-7 sm:grid-cols-8 gap-1.5">
-                {cat.emojis.map((e, idx) => (
+          filteredCategories.map(cat => (
+            <div
+              key={cat.id}
+              ref={el => (sectionRefs.current[cat.id] = el)}
+              className="space-y-1.5"
+            >
+              <h4 className="text-xs font-semibold text-[#54656f] tracking-wide px-1 pt-1">
+                {cat.name}
+              </h4>
+              <div className="grid grid-cols-10 sm:grid-cols-11 md:grid-cols-12 gap-1">
+                {cat.emojis.map((emoji, index) => (
                   <button
-                    key={idx}
+                    key={`${cat.id}-${index}`}
                     type="button"
-                    onClick={() => {
-                      onSelect(e.char);
-                    }}
-                    className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-emerald-50 hover:scale-125 transition-all select-none cursor-pointer"
-                    title={e.name}
+                    onClick={() => onSelect(emoji)}
+                    className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[22px] leading-none hover:bg-[#f0f2f5] active:scale-90 rounded-lg cursor-pointer transition-all duration-75 select-none"
+                    title={cat.name}
                   >
-                    {e.char}
+                    {emoji}
                   </button>
                 ))}
               </div>
@@ -298,11 +316,46 @@ export default function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
         )}
       </div>
 
-      {/* Footer Info */}
-      <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-        <span>Click any emoji to insert</span>
-        <span className="font-semibold text-emerald-600">WhatsApp Ready</span>
+      {/* 4. Bottom WhatsApp Switcher Pill [ 😀 | GIF | 🗂️ ] */}
+      <div className="border-t border-[#e9edef] bg-white py-2 flex items-center justify-center shrink-0">
+        <div className="inline-flex items-center rounded-full bg-[#f0f2f5] p-0.5 border border-[#e9edef]">
+          <button
+            type="button"
+            onClick={() => setActiveTab('emoji')}
+            className={`flex items-center justify-center px-4 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'emoji'
+                ? 'bg-white text-[#111b21] shadow-2xs font-bold'
+                : 'text-[#54656f] hover:text-[#111b21]'
+            }`}
+          >
+            <Smile className="w-4 h-4 text-[#111b21]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('gif')}
+            className={`flex items-center justify-center px-4 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'gif'
+                ? 'bg-white text-[#111b21] shadow-2xs font-bold'
+                : 'text-[#54656f] hover:text-[#111b21]'
+            }`}
+          >
+            <span className="text-[11px] font-bold">GIF</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('sticker')}
+            className={`flex items-center justify-center px-4 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'sticker'
+                ? 'bg-white text-[#111b21] shadow-2xs font-bold'
+                : 'text-[#54656f] hover:text-[#111b21]'
+            }`}
+          >
+            <Sticker className="w-4 h-4 text-[#54656f]" />
+          </button>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default EmojiPicker;

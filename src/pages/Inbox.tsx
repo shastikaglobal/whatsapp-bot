@@ -472,22 +472,6 @@ export default function Inbox() {
                 </button>
               </div>
             )}
-            {/* Quick WhatsApp Reactions Bar */}
-            <div className="flex items-center gap-1.5 mb-2 px-1 overflow-x-auto text-sm shrink-0">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0 mr-0.5">Quick:</span>
-              {['👍', '🤝', '🙏', '😊', '🥥', '🍌', '📞', '📦', '✅', '🧾'].map(emoji => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => insertEmoji(emoji)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 transition-all text-base shadow-2xs hover:scale-115 shrink-0 select-none cursor-pointer"
-                  title={`Insert ${emoji}`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-
             <form onSubmit={handleSendMessage} className="flex items-end gap-2 relative">
               {/* WhatsApp Style Emoji Picker Popover */}
               {isEmojiPickerOpen && (
