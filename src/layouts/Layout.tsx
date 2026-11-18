@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
+import NotificationCenter from '../components/NotificationCenter';
 import { 
   Menu, 
   LayoutDashboard, 
@@ -76,13 +77,7 @@ export default function Layout() {
           </div>
           
           <div className="flex items-center gap-4 relative z-10">
-             <button 
-               className="relative p-2.5 text-slate-300 hover:text-white transition-all rounded-full bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 shadow-[0_0_12px_rgba(0,0,0,0.3)] hover:shadow-[0_0_12px_rgba(139,92,246,0.3)]"
-               title="Notifications"
-             >
-               <Bell className="w-4 h-4" />
-               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-slate-900 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></span>
-             </button>
+             <NotificationCenter />
              <div className="h-8 w-px bg-gradient-to-b from-transparent via-slate-700 to-transparent mx-1"></div>
              <div className="flex items-center gap-3 cursor-pointer group">
                <div className="text-right hidden sm:block">

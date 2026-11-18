@@ -162,7 +162,7 @@ Customer requested human / BDE assistance.
 ${recentFormatted || 'No prior messages'}
 
 👉 Open Inbox to respond:
-https://shastikachatbot.co.in/inbox`;
+https://shastikachatbot.co.in/inbox?customerId=${customerId}`;
 
     for (const targetNum of numbers) {
       try {

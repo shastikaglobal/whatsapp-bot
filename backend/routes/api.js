@@ -10,6 +10,7 @@ import * as systemController from '../controllers/systemController.js';
 import * as whatsappController from '../controllers/whatsappController.js';
 import * as employeeController from '../controllers/employeeController.js';
 import * as webhookController from '../controllers/webhookController.js';
+import * as notificationController from '../controllers/notificationController.js';
 import { authenticate, authorizeAdmin } from '../authMiddleware.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -141,6 +142,12 @@ router.get('/conversations', messageController.getConversations);
 router.get('/messages/:conversationId', messageController.getMessages);
 router.post('/whatsapp/send', messageController.sendMessage);
 router.put('/whatsapp/takeover', messageController.toggleTakeover);
+
+// Notifications & Human Handover Alerts
+router.get('/notifications/handover', notificationController.getHandoverNotifications);
+router.post('/notifications/dismiss', notificationController.dismissHandoverNotification);
+router.get('/notifications/alert-number', notificationController.getAlertNumber);
+router.post('/notifications/alert-number', notificationController.updateAlertNumber);
 
 // WhatsApp Configuration (Admin Only)
 router.get('/whatsapp/config', authorizeAdmin, whatsappController.getConfig);

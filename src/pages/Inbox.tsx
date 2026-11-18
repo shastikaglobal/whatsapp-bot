@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X, Check } from 'lucide-react';
 import api from '../api/axios';
 
@@ -34,6 +35,8 @@ export default function Inbox() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [bdes, setBdes] = useState<{id: string, name: string}[]>([]);
+  const [searchParams] = useSearchParams();
+  const queryCustomerId = searchParams.get('customerId') || searchParams.get('customer');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +100,18 @@ export default function Inbox() {
     setIsDropdownOpen(false);
     fetchMessages(convo.customer_id);
   };
+
+  // Auto-select conversation if customerId query param is provided (e.g. from notification)
+  useEffect(() => {
+    if (queryCustomerId && conversations.length > 0) {
+      const target = conversations.find(
+        c => String(c.customer_id) === String(queryCustomerId) || String(c.id) === String(queryCustomerId)
+      );
+      if (target && (!selectedConvo || selectedConvo.customer_id !== target.customer_id)) {
+        handleSelectConvo(target);
+      }
+    }
+  }, [queryCustomerId, conversations]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
