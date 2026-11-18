@@ -68,14 +68,21 @@ export default function AutoReplyRules() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [rulesRes, settingsRes] = await Promise.all([
-        api.get('/auto-reply/rules'),
-        api.get('/settings')
-      ]);
-      setRules(rulesRes.data);
-      setSettings(settingsRes.data);
+      const rulesRes = await api.get('/auto-reply/rules');
+      if (Array.isArray(rulesRes.data)) {
+        setRules(rulesRes.data);
+      }
     } catch (err) {
-      console.error('Failed to load auto-reply data', err);
+      console.error('Failed to load rules', err);
+    }
+
+    try {
+      const settingsRes = await api.get('/settings');
+      if (settingsRes?.data) {
+        setSettings(settingsRes.data);
+      }
+    } catch (err) {
+      console.error('Failed to load settings', err);
     } finally {
       setLoading(false);
     }
@@ -170,7 +177,20 @@ export default function AutoReplyRules() {
     setSimMessages(prev => [...prev, { sender: 'customer', text }]);
     setSimInput('');
 
-    // Simulate matching: check keyword rules first
+    // Simulate matching:
+    // 1. Pure greeting check (first-time vs returning greeting)
+    const isPureGreeting = /^(hi+|hello+|hey+|hlo+|vanakkam|namaste|good\s+morning|good\s+afternoon|good\s+evening|வணக்கம்)[\s!.]*$/i.test(text);
+    if (isPureGreeting) {
+      setTimeout(() => {
+        setSimMessages(prev => [...prev, {
+          sender: 'bot',
+          text: `👋 Pure Greeting Match:\n• First-Time Customer: "${settings.first_time_greeting || 'Default First-Time Greeting'}"\n• Returning Customer: "${settings.welcome_message || 'Default Welcome Message'}"`
+        }]);
+      }, 500);
+      return;
+    }
+
+    // 2. Keyword rules
     let matched = false;
     for (const rule of rules) {
       if (rule.is_active && text.toLowerCase().includes(rule.keyword.toLowerCase())) {

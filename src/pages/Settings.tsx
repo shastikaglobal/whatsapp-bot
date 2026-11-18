@@ -239,7 +239,8 @@ export default function Settings() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Working Hours</label>
-              <input type="text" placeholder="e.g. 9AM - 5PM" value={settings.business_hours || ''} onChange={(e) => handleChange('business_hours', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              <input type="text" placeholder="e.g. 9AM - 6PM, 09:00 - 18:00, or 24 hours" value={settings.business_hours || ''} onChange={(e) => handleChange('business_hours', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              <p className="text-[11px] text-slate-400 mt-1">E.g. &quot;9AM - 6PM&quot;, &quot;09:00 - 18:00&quot;, or &quot;24 hours&quot;. Messages outside these hours receive the Outside Hours Auto-Reply.</p>
             </div>
           </div>
         </div>

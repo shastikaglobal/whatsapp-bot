@@ -74,20 +74,20 @@ textarea::placeholder {
 
 /* Card & Glass Elevators - Galaxy Theme */
 .card-pro {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(13, 20, 42, 0.92) 100%);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(139, 92, 246, 0.22);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.75) 0%, rgba(13, 20, 42, 0.82) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 92, 246, 0.28);
   border-radius: 1.25rem;
-  box-shadow: 0 10px 30px -5px rgba(2, 6, 23, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -5px rgba(2, 6, 23, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   color: #f1f5f9;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
 }
 .card-pro:hover {
-  border-color: rgba(168, 85, 247, 0.5);
-  box-shadow: 0 16px 40px -6px rgba(99, 102, 241, 0.35), 0 0 25px rgba(56, 189, 248, 0.2);
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 16px 40px -6px rgba(99, 102, 241, 0.4), 0 0 25px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .stat-hover {
@@ -124,17 +124,17 @@ textarea::placeholder {
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
 }
 
-/* Layout & Header Enhancements - Galaxy Main Bar */
+/* Layout & Header Enhancements - Galaxy Main Bar with Enhanced Glass */
 .glass-nav-header {
   background: 
-    radial-gradient(ellipse 65% 100% at 15% -20%, rgba(99, 102, 241, 0.35), transparent 70%),
-    radial-gradient(ellipse 55% 90% at 85% -20%, rgba(16, 185, 129, 0.22), transparent 70%),
-    radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.15), transparent 80%),
-    linear-gradient(135deg, #070c1d 0%, #0d1633 45%, #14102e 80%, #080d20 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.25);
-  box-shadow: 0 4px 30px -4px rgba(3, 7, 18, 0.7), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    radial-gradient(ellipse 65% 100% at 15% -20%, rgba(99, 102, 241, 0.4), transparent 70%),
+    radial-gradient(ellipse 55% 90% at 85% -20%, rgba(16, 185, 129, 0.25), transparent 70%),
+    radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.18), transparent 80%),
+    linear-gradient(135deg, rgba(7, 12, 29, 0.85) 0%, rgba(13, 22, 51, 0.82) 45%, rgba(20, 16, 46, 0.85) 80%, rgba(8, 13, 32, 0.9) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(3, 7, 18, 0.75), 0 1px 0 rgba(255, 255, 255, 0.12) inset;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -170,14 +170,27 @@ textarea::placeholder {
   }
 }
 
-/* Enhanced Cards */
+/* Enhanced Glass Cards */
 .panel-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 1.25rem;
   padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 2px 6px rgba(0, 0, 0, 0.02);
+  box-shadow: 
+    0 10px 30px -5px rgba(2, 6, 23, 0.25),
+    0 0 1px 1px rgba(255, 255, 255, 0.6) inset,
+    0 20px 40px -15px rgba(99, 102, 241, 0.12);
   margin-bottom: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.panel-card:hover {
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 
+    0 16px 36px -6px rgba(2, 6, 23, 0.3),
+    0 0 1px 1px rgba(255, 255, 255, 0.8) inset,
+    0 25px 50px -12px rgba(99, 102, 241, 0.2);
 }
 
 /* Variable and Template Pills */

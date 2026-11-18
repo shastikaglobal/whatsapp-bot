@@ -6,6 +6,66 @@ import crypto from 'crypto';
 // Pure greeting regex (English, Tamil, transliterated)
 export const PURE_GREETING_REGEX = /^(hi+|hello+|hey+|hlo+|vanakkam|namaste|good\s+morning|good\s+afternoon|good\s+evening|வணக்கம்)[\s!.]*$/i;
 
+// Greeting message defaults (fallback if bot_settings is empty)
+export const DEFAULT_WELCOME_MESSAGE = "Hello! 👋 Welcome to Shastika Global Impex. We're happy to assist you with your requirements.";
+export const DEFAULT_FIRST_TIME_GREETING = "Welcome! 🎉 It's a pleasure to have you connect with us. Please share your requirement, and our team will be happy to assist.";
+export const DEFAULT_OUTSIDE_HOURS_REPLY = "👋 Thanks for your message! We’re currently away from the office. Our team will get back to you at the earliest during business hours.";
+export const DEFAULT_HOLIDAY_REPLY = "Happy holidays! ✨ Our team is currently away. Your message has been received, and we’ll get back to you once we resume business.";
+
+/**
+ * Parses time string like "9AM", "5PM", "09:00", "18:00", "9:30 AM" into minutes from midnight.
+ */
+export function parseTimeString(timeStr) {
+  if (!timeStr) return null;
+  const match = timeStr.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const modifier = match[3] ? match[3].toLowerCase() : null;
+
+  if (modifier === 'pm' && hours < 12) hours += 12;
+  if (modifier === 'am' && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+}
+
+/**
+ * Checks whether the given date/time is outside configured business hours (Asia/Kolkata).
+ * Handles formats like "24 hours", "9AM - 5PM", "09:00 - 18:00", "Mon-Fri 9AM - 6PM".
+ * Returns false (open) if empty, unparseable, or "24 hours".
+ */
+export function isOutsideBusinessHours(businessHoursSetting, date = new Date()) {
+  if (!businessHoursSetting || typeof businessHoursSetting !== 'string') return false;
+  const clean = businessHoursSetting.trim().toLowerCase();
+  if (clean === '' || clean.includes('24 hours') || clean.includes('24/7') || clean.includes('24 hrs') || clean === '24') {
+    return false; // Open 24/7
+  }
+
+  const nowIst = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const dayNum = nowIst.getDay(); // 0 = Sunday, 6 = Saturday
+
+  if (clean.includes('mon-fri') || clean.includes('mon to fri')) {
+    if (dayNum === 0 || dayNum === 6) return true;
+  } else if (clean.includes('mon-sat') || clean.includes('mon to sat')) {
+    if (dayNum === 0) return true;
+  }
+
+  const timePart = clean.replace(/^(?:mon|tue|wed|thu|fri|sat|sun)[^0-9]*/i, '').trim();
+  const parts = timePart.split(/\s*(?:-|–|—|to)\s*/i);
+  if (parts.length !== 2) return false;
+
+  const startMins = parseTimeString(parts[0]);
+  const endMins = parseTimeString(parts[1]);
+  if (startMins === null || endMins === null) return false;
+
+  const currentMins = nowIst.getHours() * 60 + nowIst.getMinutes();
+  if (startMins <= endMins) {
+    return currentMins < startMins || currentMins >= endMins;
+  } else {
+    return currentMins < startMins && currentMins >= endMins;
+  }
+}
+
 // Short acknowledgement and gratitude regexes
 export const ACKNOWLEDGEMENT_REGEX = /^(ok+|okay|k|noted|sure|alright|fine|சரி)[\s.!]*$/i;
 export const THANKS_REGEX = /^(thanks+|thank\s+you|thx|tq|நன்றி)[\s.!]*$/i;
@@ -717,13 +777,103 @@ export const handleIncomingMessage = async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // Process Auto-Reply
+      // Check whether this is a brand-new customer (no prior customer messages)
+      const { rows: priorCustomerRows } = await pool.query(
+        `SELECT id FROM messages 
+         WHERE customer_id = $1 
+           AND sender = 'customer' 
+           AND id != $2 
+         LIMIT 1`,
+        [customerId, msgId]
+      );
+      const isFirstTimeCustomer = priorCustomerRows.length === 0;
+      const isPureGreeting = PURE_GREETING_REGEX.test(msgText.trim());
+
+      // Process Auto-Reply (Order: holiday, business hours, first-time customer, welcome, acknowledgement, handover, RFQ, keyword rules, AI)
       let replyText = null;
       let intent = null;
       let isImportant = false;
 
-      // 4.1 Fast Human Handover Request Check (Highest priority - customer needs person/BDE)
-      if (HUMAN_HANDOVER_REGEX.test(msgText.trim())) {
+      // 1. Holiday Check: If today is an active holiday in holidays table (computed in Asia/Kolkata)
+      try {
+        const todayIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+        const { rows: holidayRows } = await pool.query(
+          'SELECT name FROM holidays WHERE date = $1 AND enabled = true',
+          [todayIst]
+        );
+        if (holidayRows.length > 0) {
+          const { rows: holidaySetting } = await pool.query(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = 'holiday_reply'"
+          );
+          replyText = holidaySetting[0]?.setting_value?.trim() || DEFAULT_HOLIDAY_REPLY;
+          console.log(`[Webhook] Active holiday today ("${holidayRows[0].name}"). Sending holiday auto-reply.`);
+        }
+      } catch (holidayErr) {
+        console.error('[Webhook Holiday Check Error]:', holidayErr.message);
+      }
+
+      // 2. Business Hours Check: If message arrives outside configured working hours
+      if (!replyText) {
+        try {
+          const { rows: hoursSetting } = await pool.query(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = 'business_hours'"
+          );
+          const businessHours = hoursSetting[0]?.setting_value || '';
+          if (isOutsideBusinessHours(businessHours)) {
+            const { rows: outsideSetting } = await pool.query(
+              "SELECT setting_value FROM bot_settings WHERE setting_key = 'outside_hours_reply'"
+            );
+            replyText = outsideSetting[0]?.setting_value?.trim() || DEFAULT_OUTSIDE_HOURS_REPLY;
+            console.log(`[Webhook] Message outside business hours ("${businessHours}"). Sending outside hours reply.`);
+          }
+        } catch (hoursErr) {
+          console.error('[Webhook Business Hours Check Error]:', hoursErr.message);
+        }
+      }
+
+      // 3. First-Time Customer Greeting & Welcome Message Check:
+      // If the message is a pure greeting (hi/hello/hey/vanakkam):
+      // - Brand-new customer's first ever message -> first_time_greeting
+      // - Returning customer -> welcome_message
+      if (!replyText && isPureGreeting) {
+        if (isFirstTimeCustomer) {
+          const { rows: firstTimeSetting } = await pool.query(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = 'first_time_greeting'"
+          );
+          replyText = firstTimeSetting[0]?.setting_value?.trim() || DEFAULT_FIRST_TIME_GREETING;
+          console.log(`[Webhook] Pure greeting from first-time customer ("${msgText}"). Sending first-time greeting.`);
+        } else {
+          const { rows: welcomeSetting } = await pool.query(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = 'welcome_message'"
+          );
+          replyText = welcomeSetting[0]?.setting_value?.trim() || DEFAULT_WELCOME_MESSAGE;
+          console.log(`[Webhook] Pure greeting from returning customer ("${msgText}"). Sending welcome message.`);
+        }
+      }
+
+      // 4. Natural Acknowledgement & Gratitude Check
+      if (!replyText && ACKNOWLEDGEMENT_REGEX.test(msgText.trim())) {
+        if (resolvedLang === 'tamil') {
+          replyText = 'சரிங்க! ஏதேனும் சந்தேகம் அல்லது விவரங்கள் தேவைப்பட்டால் தயங்காமல் கேளுங்கள். 👍';
+        } else if (resolvedLang === 'tanglish') {
+          replyText = 'Seri! Ungalukku edhavadhu doubts or quotation venum na sollunga. 👍';
+        } else {
+          replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
+        }
+        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation in ${resolvedLang}.`);
+      } else if (!replyText && THANKS_REGEX.test(msgText.trim())) {
+        if (resolvedLang === 'tamil') {
+          replyText = 'மகிழ்ச்சி! எப்போது வேண்டுமானாலும் தொடர்பு கொள்ளுங்கள். 👍';
+        } else if (resolvedLang === 'tanglish') {
+          replyText = 'Welcome! Eppovum contact pannunga. 👍';
+        } else {
+          replyText = "You're welcome! Feel free to reach out anytime. 👍";
+        }
+        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply in ${resolvedLang}.`);
+      }
+
+      // 5. Human Handover Request Check
+      if (!replyText && HUMAN_HANDOVER_REGEX.test(msgText.trim())) {
         replyText = getHandoverReplyText(msgText, resolvedLang);
         intent = 'Human Request';
         isImportant = true;
@@ -746,73 +896,6 @@ export const handleIncomingMessage = async (req, res) => {
         notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, connection.access_token, assignedBde).catch(e => {
           console.warn('[Webhook] Error calling notifyAdminHandover:', e.message);
         });
-      }
-
-      // 4.2 Holiday Check: If today is an active holiday
-      if (!replyText) {
-        try {
-          const todayStr = new Date().toISOString().split('T')[0];
-          const { rows: holidayRows } = await pool.query(
-            'SELECT name FROM holidays WHERE date = $1 AND enabled = true',
-            [todayStr]
-          );
-          if (holidayRows.length > 0) {
-            const { rows: holidaySetting } = await pool.query(
-              "SELECT setting_value FROM bot_settings WHERE setting_key = 'holiday_reply'"
-            );
-            if (holidaySetting.length > 0 && holidaySetting[0].setting_value?.trim()) {
-              replyText = holidaySetting[0].setting_value.trim();
-              console.log(`[Webhook] Active holiday today ("${holidayRows[0].name}"). Using holiday auto-reply.`);
-            }
-          }
-        } catch (holidayErr) {
-          console.error('[Webhook Holiday Check Error]:', holidayErr.message);
-        }
-      }
-
-      // 4.3 Check 24-Hour Conversation Window
-      const { rows: priorMsgRows } = await pool.query(
-        `SELECT id FROM messages 
-         WHERE customer_id = $1 
-           AND id != $2 
-           AND timestamp >= NOW() - INTERVAL '24 hours' 
-         LIMIT 1`,
-        [customerId, msgId]
-      );
-      const isNewConversation = priorMsgRows.length === 0;
-      const isPureGreeting = PURE_GREETING_REGEX.test(msgText.trim());
-
-      // 4.4 Welcome Message Check:
-      // Send Welcome Message ONLY for a pure greeting (hi/hello/hii) or the first message of a new conversation that is greeting-oriented.
-      // Never use welcome message as a fallback for unmatched messages.
-      if (!replyText && isPureGreeting) {
-        const { rows: welcomeSetting } = await pool.query(
-          "SELECT setting_value FROM bot_settings WHERE setting_key = 'welcome_message'"
-        );
-        replyText = welcomeSetting[0]?.setting_value?.trim() ||
-          '👋 Welcome to Shastika Global Impex! Thank you for reaching out. How may we assist you today?';
-        console.log(`[Webhook] Pure greeting received ("${msgText}"). Sending welcome message.`);
-      }
-
-      // 4.5 Natural Acknowledgement & Gratitude Check
-      if (!replyText && ACKNOWLEDGEMENT_REGEX.test(msgText.trim())) {
-        if (resolvedLang === 'tamil') {
-          replyText = 'சரிங்க! ஏதேனும் சந்தேகம் அல்லது விவரங்கள் தேவைப்பட்டால் தயங்காமல் கேளுங்கள். 👍';
-        } else if (resolvedLang === 'tanglish') {
-          replyText = 'Seri! Ungalukku edhavadhu doubts or quotation venum na sollunga. 👍';
-        } else {
-          replyText = 'Understood! Let us know if you have any questions or need a quotation. 👍';
-        }
-        console.log(`[Webhook] Acknowledgement received ("${msgText}"). Sending natural confirmation in ${resolvedLang}.`);
-      } else if (!replyText && THANKS_REGEX.test(msgText.trim())) {
-        if (resolvedLang === 'tamil') {
-          replyText = 'மகிழ்ச்சி! எப்போது வேண்டுமானாலும் தொடர்பு கொள்ளுங்கள். 👍';
-        } else if (resolvedLang === 'tanglish') {
-          replyText = 'Welcome! Eppovum contact pannunga. 👍';
-        } else {
-          replyText = "You're welcome! Feel free to reach out anytime. 👍";
-        }
-        console.log(`[Webhook] Gratitude message received ("${msgText}"). Sending polite reply in ${resolvedLang}.`);
       }
 
       // 4.6 RFQ / Detailed Quotation Enquiry Check
