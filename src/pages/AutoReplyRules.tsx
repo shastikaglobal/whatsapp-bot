@@ -309,6 +309,25 @@ export default function AutoReplyRules() {
                 <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
               </label>
             </div>
+
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 col-span-1 sm:col-span-2">
+              <div>
+                <div className="text-sm font-semibold text-slate-700">Handover Auto-Resume Inactivity Limit</div>
+                <div className="text-xs text-slate-400">Hours without a human reply before bot resumes automatically (0 = never)</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="number" 
+                  min="0" 
+                  max="168" 
+                  step="0.5"
+                  value={settings.handover_auto_resume_hours ?? '4'} 
+                  onChange={(e) => handleSettingChange('handover_auto_resume_hours', e.target.value)} 
+                  className="w-20 p-1.5 text-center text-sm font-bold bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <span className="text-xs font-semibold text-slate-500">hours</span>
+              </div>
+            </div>
           </div>
         </div>
 

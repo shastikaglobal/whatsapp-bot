@@ -45,4 +45,12 @@ pool.query(`
   console.warn('[DB Schema Migration Notice]:', err.message);
 });
 
+// Safe, idempotent schema migration for conversations.handover_started_at
+pool.query(`
+  ALTER TABLE conversations ADD COLUMN IF NOT EXISTS handover_started_at TIMESTAMP WITH TIME ZONE;
+  UPDATE conversations SET handover_started_at = updated_at WHERE status = 'handover' AND handover_started_at IS NULL;
+`).catch(err => {
+  console.warn('[DB Schema Migration Notice]:', err.message);
+});
+
 export default pool;

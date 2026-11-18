@@ -213,6 +213,25 @@ export default function Settings() {
               Comma-separated WhatsApp phone numbers with country code. When a customer asks for a human, BDE, manager, or call, an instant WhatsApp alert with customer name, phone, and last 3 messages is dispatched to these numbers.
             </p>
           </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+              Handover Auto-Resume Inactivity Limit (Hours)
+            </label>
+            <input 
+              type="number" 
+              min="0" 
+              max="168"
+              step="0.5"
+              value={settings.handover_auto_resume_hours ?? '4'} 
+              onChange={(e) => handleChange('handover_auto_resume_hours', e.target.value)} 
+              placeholder="4" 
+              className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-rose-500 focus:border-rose-500" 
+            />
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              If a conversation is paused in handover and no human (BDE/admin) responds within these hours (default: 4, 0 = never), the next customer message automatically resets status to open and resumes bot replies.
+            </p>
+          </div>
         </div>
 
         {/* Business Information */}

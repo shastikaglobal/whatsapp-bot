@@ -66,6 +66,27 @@ export function isOutsideBusinessHours(businessHoursSetting, date = new Date()) 
   }
 }
 
+/**
+ * Checks whether a conversation in handover status should automatically resume to 'open'.
+ * If autoResumeHours <= 0, returns false (never auto-resume).
+ * Otherwise, checks if the elapsed hours since lastActivityDate is >= autoResumeHours (default: 4).
+ */
+export function shouldAutoResumeHandover(lastActivityDate, autoResumeHours = 4, now = new Date()) {
+  if (autoResumeHours === null || autoResumeHours === undefined || autoResumeHours === '') {
+    autoResumeHours = 4;
+  }
+  const hours = parseFloat(autoResumeHours);
+  if (isNaN(hours) || hours <= 0) return false;
+  if (!lastActivityDate) return false;
+
+  const activityTime = new Date(lastActivityDate).getTime();
+  const currentTime = new Date(now).getTime();
+  if (isNaN(activityTime) || isNaN(currentTime)) return false;
+
+  const diffHours = (currentTime - activityTime) / (1000 * 60 * 60);
+  return diffHours >= hours;
+}
+
 // Short acknowledgement and gratitude regexes
 export const ACKNOWLEDGEMENT_REGEX = /^(ok+|okay|k|noted|sure|alright|fine|சரி)[\s.!]*$/i;
 export const THANKS_REGEX = /^(thanks+|thank\s+you|thx|tq|நன்றி)[\s.!]*$/i;
@@ -735,46 +756,107 @@ export const handleIncomingMessage = async (req, res) => {
 
       // 3. Is conversation paused / taken over by human (handover mode)?
       if (convStatus === 'handover') {
-        console.log(`[Webhook] Customer ${customerId} conversation is in handover mode. Checking 30-min holding reply throttle.`);
-
-        // Check if a holding reply has been sent in the last 30 minutes
-        const { rows: recentHolding } = await pool.query(
-          `SELECT id, timestamp FROM messages 
-           WHERE customer_id = $1 
-             AND sender = 'holding' 
-             AND timestamp >= NOW() - INTERVAL '30 minutes' 
-           ORDER BY timestamp DESC LIMIT 1`,
-          [customerId]
-        );
-
-        if (recentHolding.length > 0) {
-          console.log(`[Webhook] Handover holding reply already sent within last 30 minutes (at ${recentHolding[0].timestamp}). Staying silent.`);
-          return res.sendStatus(200);
+        // Check auto-resume setting (default: 4 hours, 0 = never)
+        let autoResumeHours = 4;
+        try {
+          const { rows: resumeSetting } = await pool.query(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = 'handover_auto_resume_hours'"
+          );
+          if (resumeSetting.length > 0 && resumeSetting[0].setting_value !== null && resumeSetting[0].setting_value !== '') {
+            const parsed = parseFloat(resumeSetting[0].setting_value);
+            if (!isNaN(parsed)) {
+              autoResumeHours = parsed;
+            }
+          }
+        } catch (resumeErr) {
+          console.error('[Webhook Auto-Resume Setting Error]:', resumeErr.message);
         }
 
-        // Send ONE short holding reply per 30 minutes in customer's language
-        const holdingReply = getHoldingReplyText(resolvedLang, isLanguageComplaint);
-        console.log(`[Webhook] Dispatching handover holding reply in ${resolvedLang} to ${customerId}: "${holdingReply}"`);
+        let shouldAutoResume = false;
+        let lastHumanActivityTime = null;
 
-        const sendResult = await sendWhatsAppMessage(
-          senderPhone,
-          holdingReply,
-          receivingPhoneNumberId,
-          connection.access_token
-        );
-
-        if (sendResult.success) {
-          const holdingMsgId = sendResult.messages?.[0]?.id || `hold_${crypto.randomUUID()}`;
-          await pool.query(
-            'INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id) VALUES ($1, $2, $3, $4, $5, $6)',
-            [holdingMsgId, customerId, 'holding', holdingReply, 'sent', receivingPhoneNumberId]
-          );
-          await pool.query(
-            'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        if (autoResumeHours > 0) {
+          // Fetch handover_started_at from conversation (does not get overwritten by holding replies)
+          const { rows: convInfo } = await pool.query(
+            'SELECT handover_started_at, updated_at FROM conversations WHERE id = $1',
             [convId]
           );
+          const handoverStart = convInfo[0]?.handover_started_at || convInfo[0]?.updated_at;
+
+          // Find the most recent human message (BDE or admin) for this customer
+          const { rows: lastHumanRows } = await pool.query(
+            `SELECT timestamp FROM messages 
+             WHERE customer_id = $1 
+               AND sender NOT IN ('customer', 'user', 'ai', 'holding') 
+             ORDER BY timestamp DESC LIMIT 1`,
+            [customerId]
+          );
+
+          let effectiveReferenceTime = handoverStart;
+          if (lastHumanRows.length > 0 && lastHumanRows[0].timestamp) {
+            const humanMsgTime = new Date(lastHumanRows[0].timestamp).getTime();
+            const handoverStartTime = handoverStart ? new Date(handoverStart).getTime() : 0;
+            // Use latest human message time if it is newer than handover_started_at
+            if (humanMsgTime > handoverStartTime) {
+              effectiveReferenceTime = lastHumanRows[0].timestamp;
+            }
+          }
+
+          if (effectiveReferenceTime && shouldAutoResumeHandover(effectiveReferenceTime, autoResumeHours)) {
+            shouldAutoResume = true;
+          }
         }
-        return res.sendStatus(200);
+
+        if (shouldAutoResume) {
+          console.log(`[Webhook Auto-Resume] Customer ${customerId} has had no human message for >= ${autoResumeHours}h. Auto-resuming conversation to 'open'.`);
+          await pool.query(
+            'UPDATE conversations SET status = $1, requires_admin_attention = false, handover_started_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            ['open', convId]
+          );
+          convStatus = 'open';
+          // Conversation is now 'open'! Proceeds down to normal auto-reply logic (holiday, business hours, greetings, keyword rules, AI).
+        } else {
+          console.log(`[Webhook] Customer ${customerId} conversation is in handover mode (auto-resume threshold: ${autoResumeHours}h). Checking 30-min holding reply throttle.`);
+
+          // Check if a holding reply has been sent in the last 30 minutes
+          const { rows: recentHolding } = await pool.query(
+            `SELECT id, timestamp FROM messages 
+             WHERE customer_id = $1 
+               AND sender = 'holding' 
+               AND timestamp >= NOW() - INTERVAL '30 minutes' 
+             ORDER BY timestamp DESC LIMIT 1`,
+            [customerId]
+          );
+
+          if (recentHolding.length > 0) {
+            console.log(`[Webhook] Handover holding reply already sent within last 30 minutes (at ${recentHolding[0].timestamp}). Staying silent.`);
+            return res.sendStatus(200);
+          }
+
+          // Send ONE short holding reply per 30 minutes in customer's language
+          const holdingReply = getHoldingReplyText(resolvedLang, isLanguageComplaint);
+          console.log(`[Webhook] Dispatching handover holding reply in ${resolvedLang} to ${customerId}: "${holdingReply}"`);
+
+          const sendResult = await sendWhatsAppMessage(
+            senderPhone,
+            holdingReply,
+            receivingPhoneNumberId,
+            connection.access_token
+          );
+
+          if (sendResult.success) {
+            const holdingMsgId = sendResult.messages?.[0]?.id || `hold_${crypto.randomUUID()}`;
+            await pool.query(
+              'INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id) VALUES ($1, $2, $3, $4, $5, $6)',
+              [holdingMsgId, customerId, 'holding', holdingReply, 'sent', receivingPhoneNumberId]
+            );
+            await pool.query(
+              'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+              [convId]
+            );
+          }
+          return res.sendStatus(200);
+        }
       }
 
       // Check whether this is a brand-new customer (no prior customer messages)
@@ -884,7 +966,7 @@ export const handleIncomingMessage = async (req, res) => {
         const assignedBde = await autoAssignBdeToCustomer(customerId);
 
         await pool.query(
-          'UPDATE conversations SET status = $1, requires_admin_attention = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          'UPDATE conversations SET status = $1, requires_admin_attention = true, handover_started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           ['handover', convId]
         );
         await pool.query(
@@ -929,7 +1011,7 @@ export const handleIncomingMessage = async (req, res) => {
           console.log(`[Webhook] Gemini AI classified message as Human Request for customer ${customerId}. Activating handover.`);
           const assignedBde = await autoAssignBdeToCustomer(customerId);
           await pool.query(
-            'UPDATE conversations SET status = $1, requires_admin_attention = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            'UPDATE conversations SET status = $1, requires_admin_attention = true, handover_started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             ['handover', convId]
           );
           await pool.query(

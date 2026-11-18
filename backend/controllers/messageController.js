@@ -251,7 +251,12 @@ export const toggleTakeover = async (req, res) => {
     const requiresAttention = status === 'handover';
 
     await pool.query(
-      'UPDATE conversations SET status = $1, requires_admin_attention = $2, updated_at = CURRENT_TIMESTAMP WHERE customer_id = $3',
+      `UPDATE conversations SET 
+         status = $1, 
+         requires_admin_attention = $2, 
+         handover_started_at = CASE WHEN $1 = 'handover' THEN CURRENT_TIMESTAMP ELSE NULL END,
+         updated_at = CURRENT_TIMESTAMP 
+       WHERE customer_id = $3`,
       [status, requiresAttention, customerId]
     );
     res.json({ success: true, status });
