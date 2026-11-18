@@ -61,6 +61,17 @@ body {
   min-height: 100vh;
 }
 
+/* Default form controls to sharp, dark readable text on light backgrounds */
+input:not([type="checkbox"]):not([type="radio"]):not(.text-white):not([class*="text-slate-100"]):not([class*="text-slate-200"]):not([class*="text-slate-300"]):not([class*="text-slate-400"]), 
+textarea:not(.text-white):not([class*="text-slate-100"]):not([class*="text-slate-200"]):not([class*="text-slate-300"]):not([class*="text-slate-400"]), 
+select:not(.text-white) {
+  color: #0f172a;
+}
+input::placeholder, 
+textarea::placeholder {
+  color: #94a3b8;
+}
+
 /* Card & Glass Elevators - Galaxy Theme */
 .card-pro {
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(13, 20, 42, 0.92) 100%);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X, Check } from 'lucide-react';
+import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X, Check, Smile } from 'lucide-react';
+import EmojiPicker from '../components/EmojiPicker';
 import api from '../api/axios';
 
 interface Conversation {
@@ -37,8 +38,27 @@ export default function Inbox() {
   const [bdes, setBdes] = useState<{id: string, name: string}[]>([]);
   const [searchParams] = useSearchParams();
   const queryCustomerId = searchParams.get('customerId') || searchParams.get('customer');
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertEmoji = (emoji: string) => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart ?? inputMessage.length;
+      const end = textarea.selectionEnd ?? inputMessage.length;
+      const updated = inputMessage.substring(0, start) + emoji + inputMessage.substring(end);
+      setInputMessage(updated);
+      setTimeout(() => {
+        textarea.focus();
+        const newPos = start + emoji.length;
+        textarea.setSelectionRange(newPos, newPos);
+      }, 0);
+    } else {
+      setInputMessage(prev => prev + emoji);
+    }
+  };
 
   const fetchBDEs = async () => {
     try {
@@ -211,7 +231,7 @@ export default function Inbox() {
               placeholder="Search customers..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-900 placeholder:text-slate-400"
             />
           </div>
 
@@ -452,12 +472,51 @@ export default function Inbox() {
                 </button>
               </div>
             )}
-            <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+            {/* Quick WhatsApp Reactions Bar */}
+            <div className="flex items-center gap-1.5 mb-2 px-1 overflow-x-auto text-sm shrink-0">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0 mr-0.5">Quick:</span>
+              {['👍', '🤝', '🙏', '😊', '🥥', '🍌', '📞', '📦', '✅', '🧾'].map(emoji => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => insertEmoji(emoji)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 transition-all text-base shadow-2xs hover:scale-115 shrink-0 select-none cursor-pointer"
+                  title={`Insert ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleSendMessage} className="flex items-end gap-2 relative">
+              {/* WhatsApp Style Emoji Picker Popover */}
+              {isEmojiPickerOpen && (
+                <EmojiPicker 
+                  onSelect={insertEmoji} 
+                  onClose={() => setIsEmojiPickerOpen(false)} 
+                />
+              )}
+
+              {/* Emoji Picker Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setIsEmojiPickerOpen(prev => !prev)}
+                className={`h-[44px] w-[44px] flex items-center justify-center rounded-xl border transition-all shrink-0 cursor-pointer ${
+                  isEmojiPickerOpen 
+                    ? 'bg-emerald-50 border-emerald-400 text-emerald-600 shadow-sm' 
+                    : 'bg-white border-slate-300 text-slate-500 hover:text-emerald-600 hover:border-emerald-400 shadow-sm'
+                }`}
+                title="Add Emoji (WhatsApp style)"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+
               <textarea 
+                ref={textareaRef}
                 value={inputMessage}
                 onChange={e => setInputMessage(e.target.value)}
                 placeholder={selectedConvo.status === 'handover' ? "Type a reply as human BDE..." : "Type reply (sending will pause bot and take over)..."}
-                className="flex-1 max-h-32 min-h-[44px] bg-white rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm border border-slate-200 focus:border-emerald-500"
+                className="flex-1 max-h-32 min-h-[44px] bg-white rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm text-slate-900 font-medium placeholder:text-slate-400 caret-emerald-600 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 rows={1}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -469,7 +528,7 @@ export default function Inbox() {
               <button 
                 type="submit"
                 disabled={!inputMessage.trim()}
-                className="h-[44px] px-4 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-medium text-sm transition-colors shrink-0 shadow-sm"
+                className="h-[44px] px-5 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all shrink-0 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] cursor-pointer"
               >
                 <Send className="w-4 h-4 ml-0.5" />
                 <span>Send</span>
