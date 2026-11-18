@@ -112,25 +112,25 @@ export default function Products() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Product Knowledge Base</h2>
-          <p className="text-sm text-slate-500 mt-1">Manage your products so the AI can answer customer queries about them.</p>
+          <h2 className="text-2xl font-extrabold text-white tracking-tight drop-shadow-sm">Product Knowledge Base</h2>
+          <p className="text-sm text-slate-300 mt-1 font-medium">Manage your products so the AI can answer customer queries about them.</p>
         </div>
         <button 
           onClick={() => setShowModal(true)}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors"
+          className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors shadow-lg shadow-emerald-500/20"
         >
           <Plus className="w-4 h-4" /> Add Product
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
+      <div className="panel-card overflow-hidden min-h-[400px]">
         {products.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[400px] text-center p-6">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
               <Package className="w-8 h-8 text-slate-400" />
             </div>
-            <h3 className="text-lg font-bold text-slate-700 mb-2">No products added</h3>
-            <p className="text-slate-500 text-sm mb-6 max-w-sm mx-auto">
+            <h3 className="text-lg font-bold text-slate-800 mb-2">No products added</h3>
+            <p className="text-slate-600 text-sm mb-6 max-w-sm mx-auto">
               You haven't added any products to the knowledge base yet. 
             </p>
             <button 
@@ -141,10 +141,10 @@ export default function Products() {
             </button>
           </div>
         ) : (
-          <div className="p-6">
+          <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {products.map(p => (
-                <div key={p.id} className="group border border-slate-200 rounded-xl p-5 hover:border-emerald-200 hover:shadow-md transition-all bg-white relative">
+                <div key={p.id} className="group border border-slate-200/80 rounded-xl p-5 hover:border-emerald-400 hover:shadow-lg transition-all bg-white relative">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-bold text-slate-900 leading-tight pr-8">{p.name}</h3>
                     <button 
@@ -154,13 +154,13 @@ export default function Products() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="text-xs font-medium text-emerald-600 mb-3 bg-emerald-50 inline-block px-2 py-1 rounded-md">{p.category}</div>
-                  {p.description && <p className="text-sm text-slate-500 mb-4 line-clamp-2">{p.description}</p>}
+                  <div className="text-xs font-semibold text-emerald-700 mb-3 bg-emerald-50 border border-emerald-200/60 inline-block px-2 py-1 rounded-md">{p.category}</div>
+                  {p.description && <p className="text-sm text-slate-600 mb-4 line-clamp-2">{p.description}</p>}
                   
                   <div className="pt-4 border-t border-slate-100 flex justify-between items-end mt-auto">
                     <div>
-                      <div className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">Price</div>
-                      <div className="font-bold text-slate-800 text-lg">${p.price}</div>
+                      <div className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Price</div>
+                      <div className="font-extrabold text-slate-900 text-lg">${p.price}</div>
                     </div>
                     <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold tracking-wide uppercase ${
                       p.availability === 'In Stock' ? 'bg-emerald-100 text-emerald-700' : 

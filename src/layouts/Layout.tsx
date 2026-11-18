@@ -38,9 +38,9 @@ export default function Layout() {
   const Icon = currentMeta.icon;
 
   return (
-    <div className="flex h-screen bg-slate-900 overflow-hidden">
+    <div className="flex h-screen h-[100dvh] w-full bg-slate-900 overflow-hidden">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-      <main className="flex-1 flex flex-col min-w-0 galaxy-main-area relative overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 h-full min-h-0 galaxy-main-area relative overflow-hidden">
         
         {/* Ambient Cosmic Starlight & Vivid Nebula Globs (Luminous behind Frosted Glass) */}
         <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.045] pointer-events-none z-0"></div>
@@ -50,7 +50,7 @@ export default function Layout() {
         <div className="absolute -bottom-32 right-1/4 w-[480px] h-[480px] bg-emerald-500/22 rounded-full blur-[110px] pointer-events-none z-0"></div>
 
         {/* Galaxy Main Bar Header */}
-        <header className="glass-nav-header flex items-center justify-between shrink-0 relative z-30">
+        <header className="glass-nav-header flex items-center justify-between shrink-0 relative z-30 sticky top-0">
           {/* Ambient starlight shimmer overlay */}
           <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.035] pointer-events-none overflow-hidden"></div>
           {/* Bottom cosmic glowing beam */}
@@ -96,7 +96,7 @@ export default function Layout() {
           </div>
         </header>
         
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-10">
+        <div className="flex-1 overflow-y-auto min-h-0 p-6 md:p-8 relative z-10 custom-scrollbar scroll-smooth">
           <Outlet />
         </div>
       </main>

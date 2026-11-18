@@ -69,8 +69,8 @@ export default function Settings() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">System Configuration</h2>
-          <p className="text-sm text-slate-500 mt-1">Manage AI providers, business profiles, and API integrations.</p>
+          <h2 className="text-2xl font-extrabold text-white tracking-tight drop-shadow-sm">System Configuration</h2>
+          <p className="text-sm text-slate-300 mt-1 font-medium">Manage AI providers, business profiles, and API integrations.</p>
         </div>
         <button 
           onClick={handleSave} 

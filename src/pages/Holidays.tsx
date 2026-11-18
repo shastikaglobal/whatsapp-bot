@@ -103,8 +103,8 @@ export default function Holidays() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Holiday Rules</h2>
-          <p className="text-sm text-slate-500 mt-1">Manage dates when your business is closed to trigger out-of-office auto-replies.</p>
+          <h2 className="text-2xl font-extrabold text-white tracking-tight drop-shadow-sm">Holiday Rules</h2>
+          <p className="text-sm text-slate-300 mt-1 font-medium">Manage dates when your business is closed to trigger out-of-office auto-replies.</p>
         </div>
         <button 
           onClick={handleAdd}

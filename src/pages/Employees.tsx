@@ -86,8 +86,8 @@ export default function Employees() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Employees / BDEs</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage Admins and Business Development Executives (BDE sales team).</p>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight drop-shadow-sm">Employees / BDEs</h1>
+          <p className="text-sm text-slate-300 mt-1 font-medium">Manage Admins and Business Development Executives (BDE sales team).</p>
         </div>
         <button onClick={() => openModal()} className="btn-save-primary flex items-center gap-2">
           <Plus className="w-5 h-5" /> Add BDE / Employee
