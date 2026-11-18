@@ -49,9 +49,9 @@ export default function Layout() {
         <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none z-0"></div>
 
         {/* Galaxy Main Bar Header */}
-        <header className="glass-nav-header flex items-center justify-between shrink-0 overflow-hidden">
+        <header className="glass-nav-header flex items-center justify-between shrink-0 relative z-30">
           {/* Ambient starlight shimmer overlay */}
-          <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.035] pointer-events-none"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.035] pointer-events-none overflow-hidden"></div>
           {/* Bottom cosmic glowing beam */}
           <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/50 via-purple-500/50 to-transparent pointer-events-none"></div>
 
@@ -76,7 +76,7 @@ export default function Layout() {
             </div>
           </div>
           
-          <div className="flex items-center gap-4 relative z-10">
+          <div className="flex items-center gap-4 relative z-40">
              <NotificationCenter />
              <div className="h-8 w-px bg-gradient-to-b from-transparent via-slate-700 to-transparent mx-1"></div>
              <div className="flex items-center gap-3 cursor-pointer group">

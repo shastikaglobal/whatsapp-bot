@@ -240,7 +240,9 @@ export default function NotificationCenter() {
   const formatTimeAgo = (timestamp?: string) => {
     if (!timestamp) return 'Recently';
     try {
-      const diffMs = Date.now() - new Date(timestamp).getTime();
+      const timeMs = new Date(timestamp).getTime();
+      if (isNaN(timeMs)) return 'Recently';
+      const diffMs = Date.now() - timeMs;
       const diffMin = Math.floor(diffMs / 60000);
       if (diffMin < 1) return 'Just now';
       if (diffMin < 60) return `${diffMin}m ago`;
@@ -253,11 +255,15 @@ export default function NotificationCenter() {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative inline-block" ref={dropdownRef}>
       {/* Bell Trigger Button */}
       <button
-        onClick={() => setIsOpen(prev => !prev)}
-        className={`relative p-2.5 rounded-full transition-all duration-300 ${
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(prev => !prev);
+        }}
+        className={`relative p-2.5 rounded-full transition-all duration-300 cursor-pointer select-none ${
           count > 0 
             ? 'text-rose-200 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/50 shadow-[0_0_18px_rgba(244,63,94,0.45)]' 
             : 'text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 shadow-[0_0_12px_rgba(0,0,0,0.3)] hover:shadow-[0_0_12px_rgba(139,92,246,0.3)]'
@@ -265,25 +271,28 @@ export default function NotificationCenter() {
         title={count > 0 ? `${count} Pending Human Request(s)` : 'Notifications'}
       >
         {count > 0 ? (
-          <BellRing className="w-4 h-4 text-rose-400 animate-[bounce_2s_infinite]" />
+          <BellRing className="w-4 h-4 text-rose-400 animate-[bounce_2s_infinite] pointer-events-none" />
         ) : (
-          <Bell className="w-4 h-4" />
+          <Bell className="w-4 h-4 pointer-events-none" />
         )}
 
         {/* Counter Badge with Pulse Glow */}
         {count > 0 && (
           <>
-            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-amber-500 text-[10px] font-black text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] border border-slate-900 animate-pulse">
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-amber-500 text-[10px] font-black text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] border border-slate-900 animate-pulse pointer-events-none">
               {count > 99 ? '99+' : count}
             </span>
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 rounded-full bg-rose-400 opacity-60 animate-ping"></span>
+            <span className="absolute -top-1 -right-1 flex h-5 w-5 rounded-full bg-rose-400 opacity-60 animate-ping pointer-events-none"></span>
           </>
         )}
       </button>
 
       {/* Galaxy Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl bg-slate-900/95 backdrop-blur-2xl border border-indigo-500/30 shadow-[0_15px_50px_rgba(0,0,0,0.85),0_0_30px_rgba(99,102,241,0.2)] overflow-hidden z-50 flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full mt-3 w-80 sm:w-96 rounded-2xl bg-slate-900/98 backdrop-blur-2xl border border-indigo-500/40 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_30px_rgba(99,102,241,0.25)] z-[100] flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200"
+        >
           
           {/* Header */}
           <div className="p-4 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border-b border-slate-800 flex items-center justify-between">
