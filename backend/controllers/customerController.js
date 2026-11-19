@@ -119,3 +119,81 @@ export const assignBDE = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const getTestDataPreview = async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT 
+         c.id, 
+         c.name, 
+         c.phone, 
+         c.created_at,
+         COUNT(m.id) AS message_count
+       FROM customers c
+       LEFT JOIN messages m ON m.customer_id = c.id
+       WHERE c.id LIKE 'cust_test%'
+          OR c.id LIKE 'cust_live%'
+          OR c.id LIKE 'cust_sender_tag_test%'
+          OR c.id LIKE 'cust_test_rr%'
+          OR c.name IN ('Live Tester', 'Live Verification Customer', 'English Test User', 'Customer of BDE Alpha', 'Customer of BDE Beta')
+       GROUP BY c.id, c.name, c.phone, c.created_at
+       ORDER BY c.created_at DESC`
+    );
+
+    res.json({
+      success: true,
+      count: rows.length,
+      testCustomers: rows
+    });
+  } catch (error) {
+    console.error('getTestDataPreview error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const cleanupTestData = async (req, res) => {
+  try {
+    const { customerIds } = req.body || {};
+
+    if (!Array.isArray(customerIds) || customerIds.length === 0) {
+      return res.status(400).json({ error: 'No customer IDs provided for cleanup.' });
+    }
+
+    // Safety filter: Only allow deleting IDs that strictly match known test criteria
+    const { rows: verifiedRows } = await pool.query(
+      `SELECT id FROM customers 
+       WHERE id = ANY($1) 
+         AND (
+           id LIKE 'cust_test%'
+           OR id LIKE 'cust_live%'
+           OR id LIKE 'cust_sender_tag_test%'
+           OR id LIKE 'cust_test_rr%'
+           OR name IN ('Live Tester', 'Live Verification Customer', 'English Test User', 'Customer of BDE Alpha', 'Customer of BDE Beta')
+         )`,
+      [customerIds]
+    );
+
+    const verifiedIds = verifiedRows.map(r => r.id);
+    const deletedCount = verifiedIds.length;
+
+    if (deletedCount > 0) {
+      await pool.query('DELETE FROM messages WHERE customer_id = ANY($1)', [verifiedIds]);
+      await pool.query('DELETE FROM conversations WHERE customer_id = ANY($1)', [verifiedIds]);
+      await pool.query('DELETE FROM customers WHERE id = ANY($1)', [verifiedIds]);
+    }
+
+    await pool.query(
+      "DELETE FROM messages WHERE content LIKE '%[Live Hardening Verification]%' OR content LIKE '%ping probe%'"
+    );
+
+    console.log(`[Admin Action] Test data cleanup completed. Confirmed and deleted ${deletedCount} test customer(s).`);
+    res.json({
+      success: true,
+      deletedCustomers: deletedCount,
+      message: `Successfully cleaned up ${deletedCount} confirmed test customer(s) and their message history.`
+    });
+  } catch (error) {
+    console.error('cleanupTestData error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+};

@@ -12,6 +12,7 @@ import {
   Check, 
   RefreshCw, 
   AlertTriangle, 
+  AlertCircle,
   Edit2, 
   Save, 
   X,
@@ -44,6 +45,7 @@ export default function NotificationCenter() {
   const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [phoneInput, setPhoneInput] = useState('');
   const [isSavingPhone, setIsSavingPhone] = useState(false);
+  const [tokenAlert, setTokenAlert] = useState<string | null>(null);
   
   // Audio state (stored in localStorage)
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -138,6 +140,9 @@ export default function NotificationCenter() {
       
       setNotifications(list);
       setCount(newCount);
+      if (data.tokenAlert !== undefined) {
+        setTokenAlert(data.tokenAlert);
+      }
       if (data.alertNumbers !== undefined) {
         setAlertNumbers(data.alertNumbers);
         if (!isEditingPhone) {
@@ -197,6 +202,16 @@ export default function NotificationCenter() {
       knownCustomerIdsRef.current.delete(customerId);
     } catch (err) {
       console.error('Failed to dismiss notification:', err);
+    }
+  };
+
+  const handleDismissTokenAlert = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.post('/notifications/dismiss-token-alert');
+      setTokenAlert(null);
+    } catch (err) {
+      console.error('Failed to dismiss token alert:', err);
     }
   };
 
@@ -351,6 +366,31 @@ export default function NotificationCenter() {
               </button>
             </div>
           </div>
+
+          {/* Item 8: Token Error 190 Admin Alert Banner */}
+          {tokenAlert && (
+            <div className="p-3 bg-rose-950/60 border-b border-rose-500/40 text-xs text-rose-200 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-bold text-rose-300">WhatsApp Token Expired (Error 190)</div>
+                <p className="text-[11px] text-rose-200/80 leading-relaxed my-1">{tokenAlert}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => { setIsOpen(false); navigate('/whatsapp'); }}
+                    className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-[10px] font-semibold transition-colors"
+                  >
+                    Update Token
+                  </button>
+                  <button
+                    onClick={handleDismissTokenAlert}
+                    className="px-2 py-0.5 bg-rose-900/50 hover:bg-rose-900 text-rose-300 border border-rose-700/50 rounded text-[10px] font-medium transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* WhatsApp Alert Phone Setup Banner */}
           <div className="px-4 py-2.5 bg-indigo-950/30 border-b border-indigo-500/20 text-xs">

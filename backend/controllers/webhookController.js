@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { sendWhatsAppMessage } from '../services/whatsappService.js';
+import { sendWhatsAppMessage, sendWhatsAppTemplate } from '../services/whatsappService.js';
 import { generateAiReply } from '../services/aiService.js';
 import crypto from 'crypto';
 
@@ -336,9 +336,11 @@ export async function autoAssignBdeToCustomer(customerId) {
 export async function notifyAdminHandover(customerId, senderPhone, senderName, receivingPhoneNumberId, accessToken, assignedBde = null) {
   try {
     const { rows: settingRows } = await pool.query(
-      "SELECT setting_value FROM bot_settings WHERE setting_key = 'handover_notify_numbers'"
+      "SELECT setting_key, setting_value FROM bot_settings WHERE setting_key IN ('handover_notify_numbers', 'handover_alert_template')"
     );
-    const notifyStr = settingRows[0]?.setting_value?.trim();
+    const notifyStr = settingRows.find(r => r.setting_key === 'handover_notify_numbers')?.setting_value?.trim();
+    const fallbackTemplate = settingRows.find(r => r.setting_key === 'handover_alert_template')?.setting_value?.trim();
+
     if (!notifyStr) {
       console.log('[Handover Notification] No handover_notify_numbers configured in bot_settings. In-app badge active.');
       return;
@@ -385,12 +387,41 @@ https://shastikachatbot.co.in/inbox?customerId=${customerId}`;
         console.log(`[Handover Notification] Sending WhatsApp alert to admin ${targetNum}...`);
         const sendRes = await sendWhatsAppMessage(targetNum, alertMessage, receivingPhoneNumberId, accessToken);
         if (!sendRes || sendRes.error) {
-          console.warn(`[Handover Notification] WhatsApp alert to ${targetNum} failed (outside 24h window requires approved template):`, sendRes?.message || sendRes?.error);
+          console.warn(`[Handover Notification] Free-text alert to ${targetNum} failed: ${sendRes?.message || sendRes?.error}. Checking template fallback.`);
+          
+          // Item 12: Handover alert template fallback if configured
+          if (fallbackTemplate) {
+            console.log(`[Handover Notification] Attempting template fallback "${fallbackTemplate}" to ${targetNum}...`);
+            const templateRes = await sendWhatsAppTemplate(
+              targetNum,
+              fallbackTemplate,
+              'en_US',
+              [
+                {
+                  type: 'body',
+                  parameters: [
+                    { type: 'text', text: senderName || 'Customer' },
+                    { type: 'text', text: String(senderPhone || '') },
+                    { type: 'text', text: assignedBde?.name || 'Sales Team' }
+                  ]
+                }
+              ],
+              receivingPhoneNumberId,
+              accessToken
+            );
+            if (!templateRes || templateRes.error) {
+              console.warn(`[Handover Notification] Fallback template failed for ${targetNum}; keeping in-app notification active.`);
+            } else {
+              console.log(`[Handover Notification] Fallback template successfully delivered to ${targetNum}`);
+            }
+          } else {
+            console.log(`[Handover Notification] No handover_alert_template configured; in-app notification remains active.`);
+          }
         } else {
           console.log(`[Handover Notification] WhatsApp alert successfully dispatched to ${targetNum}`);
         }
       } catch (sendErr) {
-        console.warn(`[Handover Notification] Failed to notify ${targetNum}:`, sendErr.message);
+        console.warn(`[Handover Notification] Failed to notify ${targetNum} via WhatsApp (${sendErr.message}); in-app notification remains active.`);
       }
     }
   } catch (err) {

@@ -30,7 +30,7 @@ export const getConfig = async (req, res) => {
 
 export const addConfig = async (req, res) => {
   try {
-    let { display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled } = req.body;
+    let { display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled, waba_id } = req.body;
 
     if (!display_name || !phone_number_id || !whatsapp_phone_number || !access_token) {
       return res.status(400).json({ error: 'Required fields are missing.' });
@@ -43,8 +43,8 @@ export const addConfig = async (req, res) => {
     const id = `conn_${crypto.randomUUID()}`;
 
     await pool.query(
-      'INSERT INTO whatsapp_connections (id, display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, display_name.trim(), meta_app_id?.trim() || null, phone_number_id.trim(), whatsapp_phone_number.trim(), access_token.trim(), bot_enabled]
+      'INSERT INTO whatsapp_connections (id, display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled, waba_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, display_name.trim(), meta_app_id?.trim() || null, phone_number_id.trim(), whatsapp_phone_number.trim(), access_token.trim(), bot_enabled, waba_id?.trim() || null]
     );
 
     res.json({ message: 'WhatsApp connection added successfully.', id });
@@ -61,7 +61,7 @@ export const addConfig = async (req, res) => {
 export const updateConfig = async (req, res) => {
   try {
     const { id } = req.params;
-    const { display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled } = req.body;
+    const { display_name, meta_app_id, phone_number_id, whatsapp_phone_number, access_token, bot_enabled, waba_id } = req.body;
 
     if (!display_name || !phone_number_id || !whatsapp_phone_number) {
       return res.status(400).json({ error: 'Required fields are missing.' });
@@ -70,18 +70,25 @@ export const updateConfig = async (req, res) => {
     let query = 'UPDATE whatsapp_connections SET display_name = $1, meta_app_id = $2, phone_number_id = $3, whatsapp_phone_number = $4';
     let params = [display_name.trim(), meta_app_id?.trim() || null, phone_number_id.trim(), whatsapp_phone_number.trim()];
 
+    if (waba_id !== undefined) {
+      query += `, waba_id = $${params.length + 1}`;
+      params.push(waba_id ? waba_id.trim() : null);
+    }
+
     if (bot_enabled !== undefined) {
       query += `, bot_enabled = $${params.length + 1}`;
       params.push(bot_enabled);
     }
 
     // Only accept and update access_token when admin provides a real new unmasked token
+    let tokenUpdated = false;
     if (access_token && typeof access_token === 'string') {
       const trimmedToken = access_token.trim();
       const isMasked = trimmedToken.includes('...') || trimmedToken.includes('[HIDDEN]') || trimmedToken.includes('****');
       if (!isMasked && trimmedToken.length > 15 && !trimmedToken.startsWith('YOUR_NEW')) {
-        query += `, access_token = $${params.length + 1}`;
+        query += `, access_token = $${params.length + 1}, status = 'Active', connection_status = 'Connected'`;
         params.push(trimmedToken);
+        tokenUpdated = true;
       }
     }
 
@@ -92,6 +99,11 @@ export const updateConfig = async (req, res) => {
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Connection not found.' });
+    }
+
+    // If new token was saved, clear any active Error 190 alert
+    if (tokenUpdated) {
+      await pool.query("DELETE FROM bot_settings WHERE setting_key = 'meta_token_alert_190'");
     }
 
     res.json({ message: 'WhatsApp connection updated successfully.' });
@@ -207,6 +219,7 @@ export const testConnection = async (req, res) => {
       }
 
       if (isVerified) {
+        await pool.query("DELETE FROM bot_settings WHERE setting_key = 'meta_token_alert_190'");
         return res.json({
           success: true,
           message: 'Connection verified with Meta Cloud API. Number is live.',

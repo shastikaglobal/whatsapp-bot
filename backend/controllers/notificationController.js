@@ -51,19 +51,36 @@ export const getHandoverNotifications = async (req, res) => {
 
     const { rows } = await pool.query(query, params);
 
-    // Also get handover_notify_numbers from bot_settings
+    // Also get handover_notify_numbers and active token 190 alerts from bot_settings
     const { rows: settingRows } = await pool.query(
-      "SELECT setting_value FROM bot_settings WHERE setting_key = 'handover_notify_numbers'"
+      "SELECT setting_key, setting_value FROM bot_settings WHERE setting_key IN ('handover_notify_numbers', 'meta_token_alert_190')"
     );
-    const alertNumbers = settingRows[0]?.setting_value || '';
+    const alertNumbers = settingRows.find(r => r.setting_key === 'handover_notify_numbers')?.setting_value || '';
+    const tokenAlert = settingRows.find(r => r.setting_key === 'meta_token_alert_190')?.setting_value || null;
 
     res.json({
       count: rows.length,
       notifications: rows,
-      alertNumbers
+      alertNumbers,
+      tokenAlert
     });
   } catch (error) {
     console.error('[Notification Controller] getHandoverNotifications error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Dismisses an active Token Error 190 admin alert
+ */
+export const dismissTokenAlert = async (req, res) => {
+  try {
+    await pool.query(
+      "DELETE FROM bot_settings WHERE setting_key = 'meta_token_alert_190'"
+    );
+    res.json({ success: true, message: 'Token alert dismissed' });
+  } catch (error) {
+    console.error('[Notification Controller] dismissTokenAlert error:', error.message);
     res.status(500).json({ error: error.message });
   }
 };

@@ -127,6 +127,8 @@ router.get('/bdes', employeeController.getActiveBDEs);
 
 // Customers
 router.get('/customers', customerController.getCustomers);
+router.get('/customers/test-data-preview', authorizeAdmin, customerController.getTestDataPreview);
+router.post('/customers/cleanup-test-data', authorizeAdmin, customerController.cleanupTestData);
 router.get('/customers/:id', customerController.getCustomerById);
 router.post('/customers', customerController.createCustomer);
 router.put('/customers/:id', customerController.updateCustomer);
@@ -135,6 +137,9 @@ router.delete('/customers/:id', authorizeAdmin, customerController.deleteCustome
 
 // Products
 router.get('/products', productController.getProducts);
+router.get('/products/export', authorizeAdmin, productController.exportProductsCSV);
+router.post('/products/import-preview', authorizeAdmin, productController.previewImportCSV);
+router.post('/products/import', authorizeAdmin, productController.importProductsCSV);
 router.get('/products/:id', productController.getProductById);
 router.post('/products', authorizeAdmin, productController.createProduct);
 router.put('/products/:id', authorizeAdmin, productController.updateProduct);
@@ -161,6 +166,7 @@ router.get('/analytics', authorizeAdmin, analyticsController.getAnalytics);
 
 // System
 router.get('/system/status', authorizeAdmin, systemController.getSystemStatus);
+router.get('/system/health-details', authorizeAdmin, systemController.getHealthDetails);
 router.post('/system/password', systemController.changePassword);
 router.get('/system/sidebar-stats', systemController.getSidebarStats);
 
@@ -168,11 +174,14 @@ router.get('/system/sidebar-stats', systemController.getSidebarStats);
 router.get('/conversations', messageController.getConversations);
 router.get('/messages/:conversationId', messageController.getMessages);
 router.post('/whatsapp/send', messageController.sendMessage);
+router.get('/whatsapp/templates', messageController.getApprovedTemplates);
+router.post('/whatsapp/send-template', messageController.sendTemplateMessage);
 router.put('/whatsapp/takeover', messageController.toggleTakeover);
 
 // Notifications & Human Handover Alerts
 router.get('/notifications/handover', notificationController.getHandoverNotifications);
 router.post('/notifications/dismiss', notificationController.dismissHandoverNotification);
+router.post('/notifications/dismiss-token-alert', authorizeAdmin, notificationController.dismissTokenAlert);
 router.get('/notifications/alert-number', notificationController.getAlertNumber);
 router.post('/notifications/alert-number', notificationController.updateAlertNumber);
 

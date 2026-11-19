@@ -10,6 +10,7 @@ interface WhatsAppConnection {
     whatsapp_phone_number: string;
     phone_number_id: string;
     meta_app_id: string;
+    waba_id?: string;
     access_token: string;
     bot_enabled: boolean;
     connection_status: string;
@@ -34,6 +35,7 @@ export default function WhatsAppSettings() {
     whatsapp_phone_number: '',
     phone_number_id: '',
     meta_app_id: '',
+    waba_id: '',
     access_token: '',
     bot_enabled: true,
     connection_status: 'Not Verified'
@@ -67,6 +69,7 @@ export default function WhatsAppSettings() {
         whatsapp_phone_number: '',
         phone_number_id: '',
         meta_app_id: '',
+        waba_id: '',
         access_token: '',
         bot_enabled: true,
         connection_status: 'Not Verified'
@@ -227,7 +230,7 @@ export default function WhatsAppSettings() {
     : 'https://shastikachatbot.co.in/api/webhook/whatsapp';
 
   return (
-    <div className="w-full max-w-7xl mx-auto pb-12">
+    <div className="w-full max-w-7xl mx-auto pb-24">
       {toast && typeof document !== 'undefined' && createPortal(
         <div className={`toast-banner ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
           {toast.type === 'success' ? <ShieldCheck className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -290,8 +293,13 @@ export default function WhatsAppSettings() {
                                   Set as default
                                 </button>
                               )}
-                              <button onClick={() => handleTestConnection(conn.id)} className="p-1.5 text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded" title="Test Connection">
-                                  <ShieldCheck className="w-4 h-4" />
+                              <button 
+                                onClick={() => handleTestConnection(conn.id)} 
+                                disabled={testing}
+                                className="px-2.5 py-1 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg flex items-center gap-1 transition-colors" 
+                                title="Test Connection to Meta Cloud API"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" /> Test Connection
                               </button>
                               <button onClick={() => openEditModal(conn)} className="p-1.5 text-slate-400 hover:text-emerald-500 bg-slate-50 hover:bg-emerald-50 rounded" title="Edit">
                                   <Edit2 className="w-4 h-4" />
@@ -302,14 +310,21 @@ export default function WhatsAppSettings() {
                           </div>
                       </div>
 
-                      <div className="flex items-center gap-4 text-sm mb-4">
-                          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${conn.connection_status === 'Connected' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                              {conn.connection_status === 'Connected' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                              <span className="font-medium">{conn.connection_status}</span>
-                          </div>
+                      <div className="flex items-center gap-4 text-sm mb-4 flex-wrap">
+                          {conn.status === 'Token Expired' ? (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-rose-100 text-rose-800 border-rose-300">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                              <span className="font-semibold text-xs">Token Expired (190)</span>
+                            </div>
+                          ) : (
+                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${conn.connection_status === 'Connected' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                                {conn.connection_status === 'Connected' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                <span className="font-medium text-xs">{conn.connection_status}</span>
+                            </div>
+                          )}
                           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${conn.bot_enabled ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                               {conn.bot_enabled ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
-                              <span className="font-medium">{conn.bot_enabled ? 'Bot Active' : 'Bot Temporarily Disabled'}</span>
+                              <span className="font-medium text-xs">{conn.bot_enabled ? 'Bot Active' : 'Bot Temporarily Disabled'}</span>
                           </div>
                       </div>
 
@@ -332,8 +347,11 @@ export default function WhatsAppSettings() {
                         </div>
                       )}
 
-                      <div className="text-xs text-slate-400 font-mono mb-4 flex-1">
-                          ID: {conn.phone_number_id}
+                      <div className="text-xs text-slate-500 font-mono mb-4 flex-1 space-y-1">
+                          <div>Phone ID: {conn.phone_number_id}</div>
+                          <div className="text-[11px]">
+                            WABA ID: {conn.waba_id ? conn.waba_id : <span className="text-amber-600 font-sans italic">(Not set - required to fetch templates)</span>}
+                          </div>
                       </div>
 
                       <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
@@ -443,15 +461,29 @@ export default function WhatsAppSettings() {
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">WABA ID</label>
-                        <input 
-                            type="text" 
-                            value={currentConnection.meta_app_id || ''} 
-                            onChange={(e) => handleModalChange('meta_app_id', e.target.value)} 
-                            placeholder="WhatsApp Business Account ID"
-                            className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">WABA ID *</label>
+                            <input 
+                                type="text" 
+                                value={currentConnection.waba_id || ''} 
+                                onChange={(e) => handleModalChange('waba_id', e.target.value)} 
+                                placeholder="e.g. 112233445566778"
+                                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1">Required to fetch Meta approved templates.</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Meta App ID</label>
+                            <input 
+                                type="text" 
+                                value={currentConnection.meta_app_id || ''} 
+                                onChange={(e) => handleModalChange('meta_app_id', e.target.value)} 
+                                placeholder="e.g. 987654321098765"
+                                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1">Optional Meta Developer App ID.</p>
+                        </div>
                     </div>
 
                     <div>

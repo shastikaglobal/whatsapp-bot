@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import NotificationCenter from '../components/NotificationCenter';
@@ -19,6 +19,15 @@ import {
 export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Automatically reset scroll position to top whenever navigating between pages
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
   
   const pageMeta: Record<string, { title: string, icon: any, color: string, bg: string }> = {
     '/': { title: 'Dashboard Overview', icon: LayoutDashboard, color: 'text-indigo-300', bg: 'bg-indigo-500/20 border-indigo-400/30 shadow-[0_0_15px_rgba(99,102,241,0.25)]' },
@@ -40,17 +49,21 @@ export default function Layout() {
   return (
     <div className="flex h-screen h-[100dvh] w-full bg-slate-900 overflow-hidden">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-      <main className="flex-1 flex flex-col min-w-0 h-full min-h-0 galaxy-main-area relative overflow-hidden">
+      
+      {/* Main Workspace Column */}
+      <div className="flex-1 flex flex-col min-w-0 h-full min-h-0 galaxy-main-area relative">
         
-        {/* Ambient Cosmic Starlight & Vivid Nebula Globs (Luminous behind Frosted Glass) */}
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.045] pointer-events-none z-0"></div>
-        <div className="absolute -top-32 -left-32 w-[520px] h-[520px] bg-indigo-500/30 rounded-full blur-[110px] pointer-events-none z-0"></div>
-        <div className="absolute top-1/4 -right-32 w-[500px] h-[500px] bg-purple-500/28 rounded-full blur-[110px] pointer-events-none z-0"></div>
-        <div className="absolute bottom-1/4 left-1/4 w-[520px] h-[520px] bg-cyan-500/22 rounded-full blur-[110px] pointer-events-none z-0"></div>
-        <div className="absolute -bottom-32 right-1/4 w-[480px] h-[480px] bg-emerald-500/22 rounded-full blur-[110px] pointer-events-none z-0"></div>
+        {/* Ambient Cosmic Starlight & Vivid Nebula Globs (strictly clipped in background) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.045]"></div>
+          <div className="absolute -top-32 -left-32 w-[520px] h-[520px] bg-indigo-500/30 rounded-full blur-[110px]"></div>
+          <div className="absolute top-1/4 -right-32 w-[500px] h-[500px] bg-purple-500/28 rounded-full blur-[110px]"></div>
+          <div className="absolute bottom-1/4 left-1/4 w-[520px] h-[520px] bg-cyan-500/22 rounded-full blur-[110px]"></div>
+          <div className="absolute -bottom-32 right-1/4 w-[480px] h-[480px] bg-emerald-500/22 rounded-full blur-[110px]"></div>
+        </div>
 
-        {/* Galaxy Main Bar Header */}
-        <header className="glass-nav-header flex items-center justify-between shrink-0 relative z-30 sticky top-0">
+        {/* Galaxy Main Bar Header - FIXED at top, sibling to scrollable main */}
+        <header className="glass-nav-header flex items-center justify-between shrink-0 relative z-30">
           {/* Ambient starlight shimmer overlay */}
           <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.035] pointer-events-none overflow-hidden"></div>
           {/* Bottom cosmic glowing beam */}
@@ -96,10 +109,14 @@ export default function Layout() {
           </div>
         </header>
         
-        <div className="flex-1 overflow-y-auto min-h-0 p-6 md:p-8 relative z-10 custom-scrollbar scroll-smooth">
+        {/* Scrollable Main Content - THE ONLY SCROLL CONTAINER */}
+        <main 
+          ref={contentRef}
+          className="flex-1 overflow-y-auto min-h-0 p-6 md:p-8 relative z-10 custom-scrollbar flex flex-col"
+        >
           <Outlet />
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

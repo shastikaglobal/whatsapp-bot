@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X, Check, Smile } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Search, Send, User, Bot, AlertCircle, Phone, Clock, MoreVertical, X, Check, Smile, FileText } from 'lucide-react';
 import EmojiPicker from '../components/EmojiPicker';
 import api from '../api/axios';
 
@@ -17,6 +17,9 @@ interface Conversation {
   is_important?: boolean;
   requires_admin_attention?: boolean;
   phone_number_id?: string;
+  handover_started_at?: string;
+  unread_count?: number;
+  waiting_minutes?: number;
 }
 
 interface Message {
@@ -46,13 +49,76 @@ export default function Inbox() {
   const [filter, setFilter] = useState<'all' | 'needs_human' | 'bot_active' | 'resolved'>('all');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [bdes, setBdes] = useState<{id: string, name: string}[]>([]);
+  const [bdes, setBdes] = useState<{ id: string, name: string }[]>([]);
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const queryCustomerId = searchParams.get('customerId') || searchParams.get('customer');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Template Send State (Item 11)
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [approvedTemplates, setApprovedTemplates] = useState<{ name: string, language: string, category: string, description?: string, components?: any[] }[]>([]);
+  const [templateError, setTemplateError] = useState<string>('');
+  const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [isSendingTemplate, setIsSendingTemplate] = useState(false);
+
+  useEffect(() => {
+    api.get('/whatsapp/templates')
+      .then(res => {
+        const list = Array.isArray(res.data?.templates) ? res.data.templates : (Array.isArray(res.data) ? res.data : []);
+        if (list.length > 0) {
+          setApprovedTemplates(list);
+          setSelectedTemplateName(list[0].name);
+        }
+        if (res.data?.error) {
+          setTemplateError(res.data.error);
+        }
+      })
+      .catch(e => {
+        console.warn('Could not fetch templates:', e);
+        setTemplateError(e.response?.data?.error || 'Failed to fetch templates from Meta Cloud API');
+      });
+  }, []);
+
+  const handleSendTemplate = async () => {
+    if (!selectedConvo || !selectedTemplateName) return;
+    setIsSendingTemplate(true);
+    try {
+      const targetTemplate = approvedTemplates.find(t => t.name === selectedTemplateName) || { name: selectedTemplateName, language: 'en_US' };
+      const res = await api.post('/whatsapp/send-template', {
+        customerId: selectedConvo.customer_id,
+        conversationId: selectedConvo.id,
+        templateName: targetTemplate.name,
+        languageCode: targetTemplate.language || 'en_US'
+      });
+      showToast(res.data?.message || 'Template message sent successfully!', 'success');
+      setIsTemplateModalOpen(false);
+      fetchMessages(selectedConvo.customer_id);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to send template message', 'error');
+    } finally {
+      setIsSendingTemplate(false);
+    }
+  };
+
+  const formatWaitTime = (mins?: number, handoverTime?: string) => {
+    let m = mins;
+    if (m === undefined || m === null) {
+      if (handoverTime) {
+        m = Math.floor((Date.now() - new Date(handoverTime).getTime()) / 60000);
+      } else {
+        m = 0;
+      }
+    }
+    if (m < 1) return 'Just now';
+    if (m < 60) return `${m}m`;
+    const hours = Math.floor(m / 60);
+    const remMins = m % 60;
+    return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+  };
 
   const insertEmoji = (emoji: string) => {
     if (textareaRef.current) {
@@ -223,8 +289,8 @@ export default function Inbox() {
   const countResolved = conversations.filter(c => c.status === 'resolved').length;
 
   const filteredConversations = conversations.filter(c => {
-    const matchesSearch = 
-      c.customer_name?.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch =
+      c.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
       c.customer_phone?.includes(search);
     if (!matchesSearch) return false;
 
@@ -238,19 +304,27 @@ export default function Inbox() {
       return c.status === 'resolved';
     }
     return true;
+  }).sort((a, b) => {
+    // Item 13: Needs Human queue sorted OLDEST first (longest waiting customer at the top)
+    if (filter === 'needs_human') {
+      const waitA = a.waiting_minutes ?? ((Date.now() - new Date(a.handover_started_at || a.updated_at).getTime()) / 60000);
+      const waitB = b.waiting_minutes ?? ((Date.now() - new Date(b.handover_started_at || b.updated_at).getTime()) / 60000);
+      return waitB - waitA; // higher waiting minutes first = oldest first!
+    }
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 h-[calc(100vh-100px)] flex overflow-hidden">
-      
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 min-h-[580px] flex overflow-hidden">
+
       {/* Sidebar: Conversation List */}
       <div className="w-84 border-r border-slate-200 flex flex-col bg-slate-50 shrink-0">
         <div className="p-4 border-b border-slate-200 bg-white">
           <h2 className="text-lg font-bold text-slate-800 mb-3">WhatsApp Inbox</h2>
           <div className="relative mb-3">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Search customers..."
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -262,71 +336,77 @@ export default function Inbox() {
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             <button
               onClick={() => setFilter('all')}
-              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${
-                filter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${filter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
             >
               All ({conversations.length})
             </button>
             <button
               onClick={() => setFilter('needs_human')}
-              className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                filter === 'needs_human' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-              }`}
+              className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${filter === 'needs_human' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                }`}
             >
               🚨 Needs Human {countNeedsHuman > 0 && `(${countNeedsHuman})`}
             </button>
             <button
               onClick={() => setFilter('bot_active')}
-              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                filter === 'bot_active' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-              }`}
+              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${filter === 'bot_active' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
             >
               🤖 Bot ({countBotActive})
             </button>
             <button
               onClick={() => setFilter('resolved')}
-              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${
-                filter === 'resolved' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-colors ${filter === 'resolved' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
             >
               Resolved ({countResolved})
             </button>
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.map(convo => {
             const needsHuman = convo.status === 'handover' || convo.requires_admin_attention || convo.intent === 'Human Request';
             return (
-              <div 
-                key={convo.id} 
+              <div
+                key={convo.id}
                 onClick={() => handleSelectConvo(convo)}
-                className={`p-4 border-b border-slate-100 cursor-pointer transition-colors ${
-                  selectedConvo?.id === convo.id 
-                    ? 'bg-emerald-50 border-l-4 border-l-emerald-500' 
-                    : needsHuman 
-                    ? 'hover:bg-rose-50/40 border-l-4 border-l-rose-400 bg-rose-50/20' 
+                className={`p-4 border-b border-slate-100 cursor-pointer transition-colors ${selectedConvo?.id === convo.id
+                  ? 'bg-emerald-50 border-l-4 border-l-emerald-500'
+                  : needsHuman
+                    ? 'hover:bg-rose-50/40 border-l-4 border-l-rose-400 bg-rose-50/20'
                     : 'hover:bg-white border-l-4 border-l-transparent'
-                }`}
+                  }`}
               >
                 <div className="flex justify-between items-start mb-1">
                   <div className="flex flex-col">
                     <span className="font-bold text-slate-800 flex items-center gap-1.5">
                       {convo.customer_name || 'Unknown User'}
                       {needsHuman && <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />}
+                      {Number(convo.unread_count || 0) > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-bold text-[10px] shrink-0" title={`${convo.unread_count} unread messages`}>
+                          {convo.unread_count}
+                        </span>
+                      )}
                     </span>
                     {convo.intent && (
-                      <span className={`text-[10px] w-fit px-2 py-0.5 mt-1 rounded-full font-medium ${
-                        needsHuman ? 'bg-rose-100 text-rose-700 font-bold' : convo.is_important ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span className={`text-[10px] w-fit px-2 py-0.5 mt-1 rounded-full font-medium ${needsHuman ? 'bg-rose-100 text-rose-700 font-bold' : convo.is_important ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
                         {convo.intent}
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                    {new Date(convo.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                      {new Date(convo.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {needsHuman && (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full border border-amber-200" title="Waiting time since handover">
+                        ⏱️ Waiting {formatWaitTime(convo.waiting_minutes, convo.handover_started_at || convo.updated_at)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center mt-2 gap-1.5 flex-wrap">
                   <span className="text-xs text-slate-500">{convo.customer_phone}</span>
@@ -361,11 +441,11 @@ export default function Inbox() {
       {/* Main Chat Area */}
       {selectedConvo ? (
         <div className="flex-1 flex flex-col relative" style={{ backgroundColor: '#EFEAE2' }}>
-          
+
           {/* WhatsApp-inspired Doodle Pattern */}
-          <div className="absolute inset-0 z-0 pointer-events-none" style={{ 
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000000' fill-opacity='0.04' stroke='%23000000' stroke-opacity='0.04' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M40 40 h20 v15 h-5 l-5 5 v-5 h-10 z' fill='none'/%3E%3Cpath d='M120 40 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q 0 10 -10 15 q -10 -5 -10 -15 z' fill='none'/%3E%3Ccircle cx='80' cy='140' r='15' fill='none'/%3E%3Cpath d='M75 135 v2 M85 135 v2 M73 143 q 7 7 14 0' fill='none'/%3E%3Cpath d='M160 120 l 20 -10 l -5 25 l -5 -10 l -10 5 z' fill='none'/%3E%3Cpath d='M160 180 l 5 5 l 10 -10' fill='none'/%3E%3Cpath d='M30 160 v 20 h 15 v -20 z M35 175 h 5' fill='none'/%3E%3Ccircle cx='20' cy='100' r='1'/%3E%3Ccircle cx='180' cy='60' r='1'/%3E%3Ccircle cx='100' cy='90' r='1'/%3E%3Cpath d='M100 20 l 2 5 l 5 0 l -4 3 l 2 5 l -5 -4 l -5 4 l 2 -5 l -4 -3 l 5 0 z' fill='none'/%3E%3Cpath d='M10 10 q 5 0 5 -5 M15 15 l 10 10 M170 10 a10 10 0 0 0 10 10' fill='none'/%3E%3Cpath d='M50 180 h10 v10 h-10 z' fill='none'/%3E%3C/g%3E%3C/svg%3E")`, 
-            backgroundSize: '200px' 
+          <div className="absolute inset-0 z-0 pointer-events-none" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000000' fill-opacity='0.04' stroke='%23000000' stroke-opacity='0.04' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M40 40 h20 v15 h-5 l-5 5 v-5 h-10 z' fill='none'/%3E%3Cpath d='M120 40 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q 0 10 -10 15 q -10 -5 -10 -15 z' fill='none'/%3E%3Ccircle cx='80' cy='140' r='15' fill='none'/%3E%3Cpath d='M75 135 v2 M85 135 v2 M73 143 q 7 7 14 0' fill='none'/%3E%3Cpath d='M160 120 l 20 -10 l -5 25 l -5 -10 l -10 5 z' fill='none'/%3E%3Cpath d='M160 180 l 5 5 l 10 -10' fill='none'/%3E%3Cpath d='M30 160 v 20 h 15 v -20 z M35 175 h 5' fill='none'/%3E%3Ccircle cx='20' cy='100' r='1'/%3E%3Ccircle cx='180' cy='60' r='1'/%3E%3Ccircle cx='100' cy='90' r='1'/%3E%3Cpath d='M100 20 l 2 5 l 5 0 l -4 3 l 2 5 l -5 -4 l -5 4 l 2 -5 l -4 -3 l 5 0 z' fill='none'/%3E%3Cpath d='M10 10 q 5 0 5 -5 M15 15 l 10 10 M170 10 a10 10 0 0 0 10 10' fill='none'/%3E%3Cpath d='M50 180 h10 v10 h-10 z' fill='none'/%3E%3C/g%3E%3C/svg%3E")`,
+            backgroundSize: '200px'
           }} />
 
           {/* Chat Header */}
@@ -388,7 +468,7 @@ export default function Inbox() {
 
             <div className="flex items-center gap-3">
               {selectedConvo.status === 'handover' ? (
-                <button 
+                <button
                   onClick={() => handleTakeover('open')}
                   className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                   title="Resume automated bot replies"
@@ -396,7 +476,7 @@ export default function Inbox() {
                   <Bot className="w-4 h-4 text-emerald-600" /> Resume Bot
                 </button>
               ) : (
-                <button 
+                <button
                   onClick={() => handleTakeover('handover')}
                   className="px-3 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                   title="Pause bot and take over manually"
@@ -405,7 +485,7 @@ export default function Inbox() {
                 </button>
               )}
               <div className="relative" ref={dropdownRef}>
-                <button 
+                <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   className={`p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors ${isDropdownOpen ? 'bg-slate-100 text-slate-600' : 'hover:bg-slate-100'}`}
                 >
@@ -417,13 +497,13 @@ export default function Inbox() {
                     <div className="px-4 py-2 border-b border-slate-50 mb-1">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Options</p>
                     </div>
-                    <button 
+                    <button
                       onClick={() => { setIsAssignModalOpen(true); setIsDropdownOpen(false); }}
                       className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
                     >
                       <User className="w-4 h-4 text-slate-400" /> Assign BDE
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleTakeover('resolved')}
                       className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
                     >
@@ -437,9 +517,8 @@ export default function Inbox() {
 
           {/* Toast Notification Banner */}
           {toast && (
-            <div className={`px-4 py-2.5 text-xs font-semibold flex items-center justify-between border-b shrink-0 ${
-              toast.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}>
+            <div className={`px-4 py-2.5 text-xs font-semibold flex items-center justify-between border-b shrink-0 ${toast.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              }`}>
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>{toast.message}</span>
@@ -456,12 +535,11 @@ export default function Inbox() {
               const isMine = msg.sender !== 'customer' && msg.sender !== 'user';
               return (
                 <div key={msg.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] rounded-xl px-4 py-3 shadow-sm ${
-                    msg.sender === 'user' || msg.sender === 'customer' ? 'bg-white text-slate-800 rounded-tl-sm' :
+                  <div className={`max-w-[70%] rounded-xl px-4 py-3 shadow-sm ${msg.sender === 'user' || msg.sender === 'customer' ? 'bg-white text-slate-800 rounded-tl-sm' :
                     msg.status === 'failed' ? 'bg-rose-50 border border-rose-200 text-slate-800 rounded-tr-sm' :
-                    msg.sender === 'ai' ? 'bg-[#d9fdd3] text-slate-800 rounded-tr-sm' :
-                    'bg-[#d9fdd3] text-slate-800 rounded-tr-sm'
-                  }`}>
+                      msg.sender === 'ai' ? 'bg-[#d9fdd3] text-slate-800 rounded-tr-sm' :
+                        'bg-[#d9fdd3] text-slate-800 rounded-tr-sm'
+                    }`}>
                     <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                     <div className={`text-[10px] mt-1 flex items-center gap-1.5 ${isMine ? 'text-emerald-700 justify-end' : 'text-slate-400'}`}>
                       {msg.sender === 'ai' ? (
@@ -471,7 +549,7 @@ export default function Inbox() {
                       ) : isMine ? (
                         <span className="flex items-center gap-0.5 font-semibold text-emerald-800"><User className="w-3 h-3 opacity-70" /> {msg.sender === 'human' ? 'BDE' : msg.sender}</span>
                       ) : null}
-                      <span>{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     {msg.status === 'failed' && (
                       <div className="text-[11px] text-red-600 font-semibold mt-1.5 pt-1.5 border-t border-rose-200 flex items-center gap-1 justify-end">
@@ -500,9 +578,18 @@ export default function Inbox() {
               return (
                 <>
                   {isWindowClosed && (
-                    <div className="mb-2 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-700 font-medium">
-                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                      <span>24 hour window closed, free text cannot be sent, use an approved template</span>
+                    <div className="mb-2 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between gap-2 text-xs text-rose-700 font-medium">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                        <span>24 hour window closed, free text cannot be sent. Use an approved template to re-engage customer.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsTemplateModalOpen(true)}
+                        className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold text-xs transition-colors shadow-sm flex items-center gap-1 shrink-0"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Send Template
+                      </button>
                     </div>
                   )}
 
@@ -539,9 +626,9 @@ export default function Inbox() {
                   <form onSubmit={handleSendMessage} className="flex items-end gap-2 relative">
                     {/* WhatsApp Style Emoji Picker Popover */}
                     {isEmojiPickerOpen && (
-                      <EmojiPicker 
-                        onSelect={insertEmoji} 
-                        onClose={() => setIsEmojiPickerOpen(false)} 
+                      <EmojiPicker
+                        onSelect={insertEmoji}
+                        onClose={() => setIsEmojiPickerOpen(false)}
                       />
                     )}
 
@@ -550,35 +637,33 @@ export default function Inbox() {
                       type="button"
                       disabled={isWindowClosed}
                       onClick={() => setIsEmojiPickerOpen(prev => !prev)}
-                      className={`h-[44px] w-[44px] flex items-center justify-center rounded-xl border transition-all shrink-0 ${
-                        isWindowClosed
-                          ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                          : isEmojiPickerOpen 
-                            ? 'bg-emerald-50 border-emerald-400 text-emerald-600 shadow-sm cursor-pointer' 
-                            : 'bg-white border-slate-300 text-slate-500 hover:text-emerald-600 hover:border-emerald-400 shadow-sm cursor-pointer'
-                      }`}
+                      className={`h-[44px] w-[44px] flex items-center justify-center rounded-xl border transition-all shrink-0 ${isWindowClosed
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        : isEmojiPickerOpen
+                          ? 'bg-emerald-50 border-emerald-400 text-emerald-600 shadow-sm cursor-pointer'
+                          : 'bg-white border-slate-300 text-slate-500 hover:text-emerald-600 hover:border-emerald-400 shadow-sm cursor-pointer'
+                        }`}
                       title="Add Emoji"
                     >
                       <Smile className="w-5 h-5" />
                     </button>
 
-                    <textarea 
+                    <textarea
                       ref={textareaRef}
                       value={inputMessage}
                       disabled={isWindowClosed}
                       onChange={e => setInputMessage(e.target.value)}
                       placeholder={
-                        isWindowClosed 
-                          ? "24 hour window closed, free text cannot be sent, use an approved template" 
-                          : selectedConvo.status === 'handover' 
-                            ? "Type a reply as human BDE..." 
+                        isWindowClosed
+                          ? "24 hour window closed, free text cannot be sent, use an approved template"
+                          : selectedConvo.status === 'handover'
+                            ? "Type a reply as human BDE..."
                             : "Type reply (sending will pause bot and take over)..."
                       }
-                      className={`flex-1 max-h-32 min-h-[44px] rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm font-medium border transition-colors ${
-                        isWindowClosed
-                          ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                          : "bg-white text-slate-900 border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-slate-400 caret-emerald-600"
-                      }`}
+                      className={`flex-1 max-h-32 min-h-[44px] rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm font-medium border transition-colors ${isWindowClosed
+                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                        : "bg-white text-slate-900 border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-slate-400 caret-emerald-600"
+                        }`}
                       rows={1}
                       onKeyDown={e => {
                         if (e.key === 'Enter' && !e.shiftKey) {
@@ -589,15 +674,14 @@ export default function Inbox() {
                         }
                       }}
                     />
-                    <button 
+                    <button
                       type="submit"
                       disabled={!inputMessage.trim() || isWindowClosed}
                       title={isWindowClosed ? "24 hour window closed, free text cannot be sent, use an approved template" : "Send reply"}
-                      className={`h-[44px] px-5 flex items-center justify-center gap-1.5 rounded-xl font-semibold text-sm transition-all shrink-0 shadow-sm ${
-                        isWindowClosed
-                          ? "bg-slate-300 text-slate-500 cursor-not-allowed opacity-60"
-                          : "bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] cursor-pointer"
-                      }`}
+                      className={`h-[44px] px-5 flex items-center justify-center gap-1.5 rounded-xl font-semibold text-sm transition-all shrink-0 shadow-sm ${isWindowClosed
+                        ? "bg-slate-300 text-slate-500 cursor-not-allowed opacity-60"
+                        : "bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] cursor-pointer"
+                        }`}
                     >
                       <Send className="w-4 h-4 ml-0.5" />
                       <span>Send</span>
@@ -618,7 +702,7 @@ export default function Inbox() {
           <p className="text-slate-500 max-w-sm">Select a conversation from the sidebar to view the message history and reply to the customer.</p>
         </div>
       )}
-      
+
       {/* Right Panel: Customer Details */}
       {selectedConvo && (
         <div className="w-72 border-l border-slate-200 bg-white shrink-0 hidden lg:block overflow-y-auto">
@@ -629,7 +713,7 @@ export default function Inbox() {
             <h3 className="font-bold text-lg text-slate-900">{selectedConvo.customer_name}</h3>
             <p className="text-sm text-slate-500">Active Customer</p>
           </div>
-          
+
           <div className="p-6 space-y-6">
             <div>
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Contact Details</h4>
@@ -647,7 +731,7 @@ export default function Inbox() {
                     </div>
                   </div>
                   {sessionStorage.getItem('shastika_role')?.toLowerCase() === 'admin' && (
-                    <button 
+                    <button
                       onClick={() => setIsAssignModalOpen(true)}
                       className="text-xs text-emerald-600 hover:underline font-semibold"
                     >
@@ -661,7 +745,7 @@ export default function Inbox() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</h4>
               {selectedConvo.requires_admin_attention ? (
@@ -688,6 +772,101 @@ export default function Inbox() {
 
 
 
+      {/* Template Send Modal (Item 11) */}
+      {isTemplateModalOpen && selectedConvo && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-lg font-bold text-slate-800">Send WhatsApp Template</h2>
+              </div>
+              <button onClick={() => setIsTemplateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <p className="text-xs text-slate-600">
+                More than 24 hours have elapsed since the customer's last incoming message. Meta Cloud API requires an approved message template to re-open the conversation.
+              </p>
+
+              {templateError && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold">Templates Notice</div>
+                    <p className="mt-0.5">{templateError}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setIsTemplateModalOpen(false); navigate('/whatsapp'); }}
+                      className="mt-1.5 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-semibold transition-colors"
+                    >
+                      Configure WABA ID in WhatsApp Settings
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {approvedTemplates.length > 0 ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Select Approved Template
+                    </label>
+                    <select
+                      value={selectedTemplateName}
+                      onChange={e => setSelectedTemplateName(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {approvedTemplates.map(t => (
+                        <option key={t.name} value={t.name}>
+                          {t.name} ({t.language}) - {t.category || 'General'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {(() => {
+                    const currentT = approvedTemplates.find(t => t.name === selectedTemplateName);
+                    return (
+                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
+                        <div className="font-semibold text-slate-700">Template Information:</div>
+                        <div>Name: <span className="font-mono text-slate-900 font-medium">{currentT?.name || selectedTemplateName}</span></div>
+                        <div>Language: <span className="font-mono text-slate-900 font-medium">{currentT?.language || 'en_US'}</span></div>
+                        <div>Category: <span>{currentT?.category || 'Pre-approved re-engagement template'}</span></div>
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : !templateError ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 text-center">
+                  Loading templates from Meta Cloud API...
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsTemplateModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendTemplate}
+                disabled={isSendingTemplate}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
+              >
+                <Send className="w-4 h-4" /> {isSendingTemplate ? 'Sending...' : 'Send Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assign BDE Modal */}
       {isAssignModalOpen && selectedConvo && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[9999]">
@@ -698,17 +877,16 @@ export default function Inbox() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-2 max-h-60 overflow-y-auto mb-6">
               {bdes.map(bde => (
                 <button
                   key={bde.id}
                   onClick={() => handleAssignBDE(bde.id)}
-                  className={`w-full text-left p-4 rounded-xl border flex items-center justify-between transition-colors ${
-                    selectedConvo.assigned_bde_id === bde.id 
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
-                      : 'border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700'
-                  }`}
+                  className={`w-full text-left p-4 rounded-xl border flex items-center justify-between transition-colors ${selectedConvo.assigned_bde_id === bde.id
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                    : 'border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { Plus, X, CheckCircle2, AlertCircle, MessageSquare, Search } from 'lucide-react';
+import { Plus, X, CheckCircle2, AlertCircle, MessageSquare, Search, Trash2 } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface Customer {
   id: string;
@@ -29,10 +30,65 @@ export default function Customers() {
   const [success, setSuccess] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'needs_human' | 'active'>('all');
+  const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [testPreviewList, setTestPreviewList] = useState<any[]>([]);
+  const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
+
+  const isAdmin = typeof window !== 'undefined' && localStorage.getItem('role')?.toLowerCase() === 'admin';
 
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  const handleOpenCleanupPreview = async () => {
+    setLoadingPreview(true);
+    setError('');
+    try {
+      const res = await api.get('/customers/test-data-preview');
+      const list = res.data?.testCustomers || [];
+      setTestPreviewList(list);
+      setSelectedTestIds(list.map((c: any) => c.id));
+      setIsCleanupModalOpen(true);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to fetch test data preview');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleToggleSelectTest = (id: string) => {
+    setSelectedTestIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAllTests = () => {
+    if (selectedTestIds.length === testPreviewList.length) {
+      setSelectedTestIds([]);
+    } else {
+      setSelectedTestIds(testPreviewList.map(c => c.id));
+    }
+  };
+
+  const handleConfirmCleanup = async () => {
+    if (selectedTestIds.length === 0) return;
+    setIsCleaning(true);
+    try {
+      const res = await api.post('/customers/cleanup-test-data', { customerIds: selectedTestIds });
+      setSuccess(res.data?.message || `Successfully cleaned up ${selectedTestIds.length} test customer(s).`);
+      setTimeout(() => setSuccess(''), 4000);
+      setIsCleanupModalOpen(false);
+      fetchCustomers();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to cleanup test data');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setIsCleaning(false);
+    }
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -138,9 +194,22 @@ export default function Customers() {
             </button>
           </div>
 
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleOpenCleanupPreview}
+              disabled={loadingPreview || isCleaning}
+              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm ml-auto disabled:opacity-50"
+              title="Admin only: Preview and clean up verified test customers"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {loadingPreview ? 'Scanning...' : isCleaning ? 'Cleaning...' : 'Clean Up Test Data'}
+            </button>
+          )}
+
           <button
             onClick={() => setIsModalOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm ml-auto"
+            className={`bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm ${!isAdmin ? 'ml-auto' : ''}`}
           >
             <Plus className="w-3.5 h-3.5" />
             Add Customer
@@ -274,6 +343,121 @@ export default function Customers() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Test Data Cleanup Modal with Preview & Checkboxes */}
+      {isCleanupModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  Clean Up Test Customers
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Select confirmed test customers to purge. Real customers will never be affected.
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsCleanupModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
+              {testPreviewList.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-800">No test customer records found</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Your database contains only legitimate production customer records.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100 text-xs">
+                    <span className="font-semibold text-slate-700">
+                      Found {testPreviewList.length} test customer(s)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAllTests}
+                      className="text-emerald-600 hover:text-emerald-700 font-semibold"
+                    >
+                      {selectedTestIds.length === testPreviewList.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {testPreviewList.map((tc) => {
+                      const isSelected = selectedTestIds.includes(tc.id);
+                      return (
+                        <div
+                          key={tc.id}
+                          onClick={() => handleToggleSelectTest(tc.id)}
+                          className={`p-3 rounded-lg border text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected ? 'bg-rose-50/60 border-rose-300' : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}} // handled by parent div onClick
+                              className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
+                            />
+                            <div>
+                              <div className="font-semibold text-slate-900 flex items-center gap-2">
+                                <span>{tc.name}</span>
+                                <span className="font-mono text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
+                                  {tc.id}
+                                </span>
+                              </div>
+                              <div className="text-slate-500 text-[11px] mt-0.5">
+                                Phone: {tc.phone} • Messages: {tc.message_count || 0}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                            isSelected ? 'bg-rose-200 text-rose-800' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {isSelected ? 'To Delete' : 'Keep'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+              <span className="text-xs text-slate-500">
+                {selectedTestIds.length} of {testPreviewList.length} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCleanupModalOpen(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded-lg shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCleanup}
+                  disabled={selectedTestIds.length === 0 || isCleaning}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  {isCleaning ? 'Deleting...' : `Confirm & Delete (${selectedTestIds.length})`}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -60,10 +60,11 @@ CRITICAL: Since exact prices, MOQs, stock counts, and shipping transit days are 
     } else {
       productContext = 'PRODUCTS SECTION (Facts from Database):\n';
       products.forEach(p => {
+        const hasValidPrice = p.price !== null && p.price !== undefined && parseFloat(p.price) > 0;
         productContext += `- Product: ${p.name}\n` +
           (p.category ? `  Category: ${p.category}\n` : '') +
           (p.description ? `  Description: ${p.description}\n` : '') +
-          (p.price !== null && p.price !== undefined ? `  Price: ₹${p.price}\n` : '  Price: Price on request / team will confirm\n') +
+          (hasValidPrice ? `  Price: ₹${p.price}\n` : '  Price: Price on request (our sales team will confirm)\n') +
           (p.moq ? `  MOQ: ${p.moq}\n` : '  MOQ: Team will confirm\n') +
           (p.availability ? `  Availability: ${p.availability}\n` : '') +
           (p.shippingInfo ? `  Shipping Info: ${p.shippingInfo}\n` : '') +
@@ -121,7 +122,7 @@ RULES OF ENGAGEMENT:
      * NEVER reply in Tanglish if the customer wrote in English.
      * Other languages -> Respond in that language.
 3. CONCISENESS: Keep your reply short and professional, strictly maximum 3 to 4 lines, and at most ONE emoji.
-4. STRICT PRODUCT TRUTH: ONLY use facts from the PRODUCTS SECTION below. Never invent prices, MOQ, certificates, or delivery dates. If unknown or not in the list, state that our sales team will confirm.
+4. STRICT PRODUCT TRUTH: ONLY use facts from the PRODUCTS SECTION below. If a product's price is NULL, 0, or 'Price on request', NEVER state or guess a price — state that our sales team will confirm the pricing. Never invent MOQ, certificates, or delivery dates. If unknown or not in the list, state that our sales team will confirm.
 5. COLLECT MISSING DETAILS ONE AT A TIME: In a natural sales conversation, collect missing details one at a time:
    - Product
    - Quantity

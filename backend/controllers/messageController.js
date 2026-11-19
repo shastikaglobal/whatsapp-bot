@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
-import { sendWhatsAppMessage } from '../services/whatsappService.js';
+import axios from 'axios';
+import { sendWhatsAppMessage, sendWhatsAppTemplate } from '../services/whatsappService.js';
 import crypto from 'crypto';
 
 export const getConversations = async (req, res) => {
@@ -15,18 +16,42 @@ export const getConversations = async (req, res) => {
         cust.assigned_bde_id,
         e.name as assigned_bde_name,
         wc.display_name as connection_name,
-        wc.whatsapp_phone_number as receiving_phone_number
+        wc.whatsapp_phone_number as receiving_phone_number,
+        COALESCE((
+          SELECT COUNT(*) 
+          FROM messages m 
+          WHERE m.customer_id = c.customer_id 
+            AND m.sender IN ('customer', 'user')
+            AND m.timestamp > COALESCE((
+              SELECT MAX(m2.timestamp) 
+              FROM messages m2 
+              WHERE m2.customer_id = c.customer_id 
+                AND m2.sender NOT IN ('customer', 'user')
+            ), '1970-01-01'::timestamp)
+        ), 0) as unread_count,
+        ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(c.handover_started_at, c.updated_at))) / 60) as waiting_minutes
       FROM conversations c
       JOIN customers cust ON c.customer_id = cust.id
       LEFT JOIN employees e ON cust.assigned_bde_id = e.id
       LEFT JOIN whatsapp_connections wc ON TRIM(c.phone_number_id) = TRIM(wc.phone_number_id)
     `;
     const params = [];
+    const conditions = [];
 
     // BDE can see only conversations for customers assigned to them or unassigned
     if (isBde && req.user?.id) {
-      query += ` WHERE (cust.assigned_bde_id = $1 OR cust.assigned_bde_id IS NULL) `;
       params.push(req.user.id);
+      conditions.push(`(cust.assigned_bde_id = $${params.length} OR cust.assigned_bde_id IS NULL)`);
+    }
+
+    const { status } = req.query;
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`c.status = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ` + conditions.join(' AND ');
     }
 
     query += ` ORDER BY c.updated_at DESC`;
@@ -346,6 +371,173 @@ export const toggleTakeover = async (req, res) => {
     res.json({ success: true, status });
   } catch (error) {
     console.error('toggleTakeover error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Returns available approved templates fetched from Meta Graph API using default connection WABA ID.
+ */
+export const getApprovedTemplates = async (req, res) => {
+  try {
+    const { rows: defaultRows } = await pool.query(
+      `SELECT id, waba_id, access_token, display_name 
+       FROM whatsapp_connections 
+       WHERE is_default = true 
+       LIMIT 1`
+    );
+
+    if (defaultRows.length === 0 || !defaultRows[0].waba_id || !defaultRows[0].waba_id.trim()) {
+      return res.status(200).json({
+        success: false,
+        templates: [],
+        error: 'WABA ID (WhatsApp Business Account ID) is not configured on the default WhatsApp connection. Please add WABA ID in WhatsApp Settings to fetch Meta-approved templates.'
+      });
+    }
+
+    const conn = defaultRows[0];
+    const wabaId = conn.waba_id.trim();
+    const token = conn.access_token;
+
+    try {
+      const metaRes = await axios.get(
+        `https://graph.facebook.com/v19.0/${wabaId}/message_templates?status=APPROVED`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 10000
+        }
+      );
+
+      const templates = (metaRes.data?.data || []).map(t => ({
+        id: t.id,
+        name: t.name,
+        language: t.language,
+        status: t.status,
+        category: t.category,
+        components: t.components || []
+      }));
+
+      return res.json({ success: true, templates });
+    } catch (metaErr) {
+      const errMsg = metaErr.response?.data?.error?.message || metaErr.message;
+      console.warn(`[Meta Templates Error] Failed to fetch templates for WABA ${wabaId}:`, errMsg);
+      return res.status(200).json({
+        success: false,
+        templates: [],
+        error: `Meta Cloud API error: ${errMsg}`
+      });
+    }
+  } catch (error) {
+    console.error('getApprovedTemplates error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Sends an approved template message when the 24-hour messaging window is closed.
+ */
+export const sendTemplateMessage = async (req, res) => {
+  try {
+    const { customerId, conversationId, templateName, languageCode = 'en_US', components = [], phoneNumberId: explicitPhoneId } = req.body;
+
+    if (!customerId || !templateName) {
+      return res.status(400).json({ error: 'Customer ID and templateName are required.' });
+    }
+
+    const isBde = String(req.user?.role || '').toLowerCase() === 'bde';
+
+    const { rows: custRows } = await pool.query('SELECT phone, assigned_bde_id FROM customers WHERE id = $1', [customerId]);
+    if (custRows.length === 0) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    if (isBde && req.user?.id && custRows[0].assigned_bde_id && Number(custRows[0].assigned_bde_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Access denied: Customer assigned to another BDE' });
+    }
+
+    const phone = custRows[0].phone;
+
+    const { phoneNumberId: actualPhoneId, accessToken, convId: resolvedConvId } = await resolveWhatsAppConnection(
+      explicitPhoneId,
+      conversationId,
+      customerId
+    );
+    const convId = resolvedConvId || conversationId || null;
+
+    const templateResult = await sendWhatsAppTemplate(
+      phone,
+      templateName,
+      languageCode,
+      components,
+      actualPhoneId,
+      accessToken
+    );
+
+    const senderTag = req.user?.name || (String(req.user?.role || '').toLowerCase() === 'admin' ? 'Admin' : 'BDE');
+    
+    // Extract filled variables from components for clean readability
+    const filledVars = [];
+    if (Array.isArray(components)) {
+      for (const comp of components) {
+        if (Array.isArray(comp.parameters)) {
+          comp.parameters.forEach(p => {
+            if (p.text) filledVars.push(p.text);
+          });
+        }
+      }
+    }
+    const varsText = filledVars.length > 0 ? ` (Variables: ${filledVars.join(', ')})` : '';
+    const displayContent = `[Template: ${templateName}]${varsText}`;
+
+    if (!templateResult || templateResult.error) {
+      const errorCode = templateResult?.code || 'ERROR';
+      const errMsg = templateResult?.message || 'Meta Cloud API rejected template send';
+      const failureReason = templateResult?.code ? `${templateResult.code}: ${templateResult.message}` : errMsg;
+      const failedMsgId = `failed_${crypto.randomUUID()}`;
+
+      try {
+        await pool.query(
+          `INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id, failure_reason)
+           VALUES ($1, $2, $3, $4, 'failed', $5, $6)`,
+          [failedMsgId, customerId, senderTag, displayContent, actualPhoneId, failureReason]
+        );
+      } catch (insertErr) {
+        await pool.query(
+          `INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id)
+           VALUES ($1, $2, $3, $4, 'failed', $5)`,
+          [failedMsgId, customerId, senderTag, displayContent, actualPhoneId]
+        );
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: errMsg,
+        code: errorCode,
+        messageId: failedMsgId,
+        failure_reason: failureReason
+      });
+    }
+
+    const metaMsgId = templateResult.messages?.[0]?.id || `msg_${crypto.randomUUID()}`;
+    await pool.query(
+      'INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id) VALUES ($1, $2, $3, $4, $5, $6)',
+      [metaMsgId, customerId, senderTag, displayContent, 'sent', actualPhoneId]
+    );
+
+    if (convId) {
+      await pool.query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [convId]);
+    } else {
+      await pool.query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE customer_id = $1', [customerId]);
+    }
+
+    console.log(`[Template Send Succeeded] Template ${templateName} dispatched to ${phone} via PhoneID ${actualPhoneId}`);
+    res.json({
+      success: true,
+      message: `Template "${templateName}" sent successfully`,
+      messageId: metaMsgId
+    });
+  } catch (error) {
+    console.error('Send template error:', error.message);
     res.status(500).json({ error: error.message });
   }
 };

@@ -53,17 +53,19 @@ pool.query(`
   console.warn('[DB Schema Migration Notice]:', err.message);
 });
 
-// Safe, idempotent schema migration for messages.failure_reason
+// Safe, idempotent schema migration for messages.failure_reason and fast index
 pool.query(`
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS failure_reason TEXT;
+  CREATE INDEX IF NOT EXISTS idx_messages_customer_timestamp ON messages (customer_id, timestamp ASC);
 `).catch(err => {
   console.warn('[DB Schema Migration Notice]:', err.message);
 });
 
-// Safe, idempotent schema migration for whatsapp_connections (is_default, status)
+// Safe, idempotent schema migration for whatsapp_connections (is_default, status, waba_id)
 pool.query(`
   ALTER TABLE whatsapp_connections ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false;
   ALTER TABLE whatsapp_connections ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Active';
+  ALTER TABLE whatsapp_connections ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100);
   UPDATE whatsapp_connections 
   SET is_default = true 
   WHERE (whatsapp_phone_number LIKE '%9789090920%' OR phone_number_id = '1429324643600789')

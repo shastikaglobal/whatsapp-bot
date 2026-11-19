@@ -186,3 +186,49 @@ export const getSidebarStats = async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve sidebar stats.' });
   }
 };
+
+export const getHealthDetails = async (req, res) => {
+  const start = Date.now();
+  let dbStatus = 'healthy';
+  let dbLatencyMs = null;
+  let connectionsSummary = [];
+
+  try {
+    await pool.query('SELECT 1');
+    dbLatencyMs = Date.now() - start;
+
+    const { rows: connRows } = await pool.query(
+      `SELECT id, display_name, phone_number_id, status, connection_status, is_default, waba_id
+       FROM whatsapp_connections 
+       ORDER BY is_default DESC, created_at ASC`
+    );
+    connectionsSummary = connRows.map(c => ({
+      id: c.id,
+      displayName: c.display_name,
+      phoneNumberId: c.phone_number_id ? '••••' + c.phone_number_id.slice(-4) : 'N/A',
+      status: c.status || c.connection_status,
+      isDefault: !!c.is_default,
+      wabaConfigured: !!(c.waba_id && c.waba_id.trim())
+    }));
+  } catch (err) {
+    dbStatus = 'unhealthy: ' + err.message;
+  }
+
+  const memory = process.memoryUsage();
+  res.json({
+    status: dbStatus === 'healthy' ? 'UP' : 'DEGRADED',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    environment: process.env.NODE_ENV || 'development',
+    database: {
+      status: dbStatus,
+      latencyMs: dbLatencyMs
+    },
+    whatsappConnections: connectionsSummary,
+    memory: {
+      rssMb: Math.round(memory.rss / (1024 * 1024)),
+      heapUsedMb: Math.round(memory.heapUsed / (1024 * 1024)),
+      heapTotalMb: Math.round(memory.heapTotal / (1024 * 1024))
+    }
+  });
+};

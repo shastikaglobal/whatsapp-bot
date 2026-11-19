@@ -61,10 +61,28 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health Check Endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
+// Enhanced Health Check Endpoint (Item 9)
+// Reduced public health endpoint: status, database ok, uptime
+const publicHealthHandler = async (req, res) => {
+  let dbOk = false;
+  try {
+    const { default: pool } = await import('./config/db.js');
+    await pool.query('SELECT 1');
+    dbOk = true;
+  } catch (err) {
+    dbOk = false;
+  }
+
+  const statusCode = dbOk ? 200 : 503;
+  res.status(statusCode).json({
+    status: dbOk ? 'ok' : 'degraded',
+    database: dbOk ? 'ok' : 'down',
+    uptime: Math.floor(process.uptime())
+  });
+};
+
+app.get('/health', publicHealthHandler);
+app.get('/api/health', publicHealthHandler);
 
 // API and Webhook routes (Mount both /api/webhook and /webhook for flexible integration)
 app.use('/api/webhook', webhookRoutes);
