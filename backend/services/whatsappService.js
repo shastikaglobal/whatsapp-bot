@@ -2,6 +2,8 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
+const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v21.0';
+
 // Token Error 190 Throttle: at most once per hour
 let lastTokenAlertWriteTime = 0;
 const ONE_HOUR_MS = 60 * 60 * 1000;
