@@ -110,8 +110,8 @@ export const getMessages = async (req, res) => {
  *  1. Explicitly provided phoneNumberId (if valid and not placeholder)
  *  2. Conversation's assigned phone_number_id
  *  3. Customer's previous messages' phone_number_id
- *  4. Fallback to active verified connection (+91 97890 90920, Phone Number ID 1429324643600789)
- * NEVER uses the unverified 66265 connection (1272367032630223) or dummy placeholder tokens.
+ *  4. Default connection (is_default = true) or active verified connection
+ * NEVER uses connections with placeholder tokens (YOUR_NEW...) or unverified status.
  */
 export const resolveWhatsAppConnection = async (explicitPhoneId, convId, customerId, db = pool) => {
   let actualPhoneId = explicitPhoneId ? String(explicitPhoneId).trim() : null;
@@ -152,14 +152,15 @@ export const resolveWhatsAppConnection = async (explicitPhoneId, convId, custome
   }
 
   // 4. Resolve connection credentials for actualPhoneId
-  // Exclude placeholder tokens (e.g. YOUR_NEW_TOKEN_HERE) and unverified 66265 connection (1272367032630223)
+  // Exclude placeholder tokens (e.g. YOUR_NEW_TOKEN_HERE) and unverified status
   let connection = null;
-  if (actualPhoneId && actualPhoneId !== '1272367032630223') {
+  if (actualPhoneId) {
     const { rows: connRows } = await db.query(
-      `SELECT id, display_name, phone_number_id, whatsapp_phone_number, access_token 
+      `SELECT id, display_name, phone_number_id, whatsapp_phone_number, access_token, is_default, status 
        FROM whatsapp_connections 
        WHERE TRIM(phone_number_id) = $1 
-         AND access_token NOT LIKE 'YOUR_NEW%'`,
+         AND access_token NOT LIKE 'YOUR_NEW%'
+         AND (status IS NULL OR LOWER(status) != 'unverified')`,
       [actualPhoneId]
     );
     if (connRows.length > 0) {
@@ -167,17 +168,15 @@ export const resolveWhatsAppConnection = async (explicitPhoneId, convId, custome
     }
   }
 
-  // 5. Fallback: Always use the verified active connection (+91 97890 90920, Phone Number ID 1429324643600789)
-  // NEVER use the unverified 66265 connection (1272367032630223)
+  // 5. Fallback: Use default connection (is_default = true) or first active verified connection
+  // NEVER use connections with placeholder tokens (YOUR_NEW...) or unverified status
   if (!connection) {
     const { rows: defaultRows } = await db.query(
-      `SELECT id, display_name, phone_number_id, whatsapp_phone_number, access_token 
+      `SELECT id, display_name, phone_number_id, whatsapp_phone_number, access_token, is_default, status 
        FROM whatsapp_connections 
-       WHERE TRIM(phone_number_id) = '1429324643600789'
-          OR (TRIM(phone_number_id) != '1272367032630223' 
-              AND access_token NOT LIKE 'YOUR_NEW%' 
-              AND bot_enabled = true)
-       ORDER BY CASE WHEN TRIM(phone_number_id) = '1429324643600789' THEN 0 ELSE 1 END, created_at DESC 
+       WHERE access_token NOT LIKE 'YOUR_NEW%' 
+         AND (status IS NULL OR LOWER(status) != 'unverified')
+       ORDER BY CASE WHEN is_default = true THEN 0 ELSE 1 END, created_at ASC 
        LIMIT 1`
     );
     if (defaultRows.length > 0) {
@@ -223,7 +222,7 @@ export const sendMessage = async (req, res) => {
 
     const phone = custRows[0].phone;
 
-    // 2. Resolve WhatsApp connection (same connection as conversation/messages, or verified 1429324643600789)
+    // 2. Resolve WhatsApp connection (same connection as conversation/messages, or default verified connection)
     const { phoneNumberId: actualPhoneId, accessToken, convId: resolvedConvId } = await resolveWhatsAppConnection(
       explicitPhoneId,
       conversationId,

@@ -30,6 +30,9 @@ export const createEmployee = async (req, res) => {
   if (!name || !username || !password) {
     return res.status(400).json({ error: 'Name, username/email/phone, and password are required' });
   }
+  if (typeof password !== 'string' || password.length < 10) {
+    return res.status(400).json({ error: 'Password must be at least 10 characters long' });
+  }
   const normalizedRole = String(role || 'BDE').toLowerCase() === 'admin' ? 'Admin' : 'BDE';
   try {
     const password_hash = await bcrypt.hash(password, 10);
@@ -56,6 +59,9 @@ export const updateEmployee = async (req, res) => {
     const params = [name, username, normalizedRole, status];
     
     if (password) {
+      if (typeof password !== 'string' || password.length < 10) {
+        return res.status(400).json({ error: 'Password must be at least 10 characters long' });
+      }
       const password_hash = await bcrypt.hash(password, 10);
       query += ', password_hash = $5 WHERE id = $6 RETURNING id, name, username, role, status';
       params.push(password_hash, id);

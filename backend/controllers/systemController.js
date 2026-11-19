@@ -89,8 +89,8 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ error: 'Both current and new password are required.' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 10) {
+      return res.status(400).json({ error: 'New password must be at least 10 characters long.' });
     }
 
     // Identify user to update (from authenticated token or default admin)

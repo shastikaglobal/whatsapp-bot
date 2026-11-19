@@ -18,7 +18,42 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // Trust proxy for production reverse proxy (Nginx / Cloudflare)
 app.set('trust proxy', 1);
 
-app.use(cors());
+// Security Headers Middleware (Helmet-style)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+  next();
+});
+
+// Sensible CORS Configuration (User domain + local development)
+const allowedOrigins = [
+  'https://shastikachatbot.co.in',
+  'https://www.shastikachatbot.co.in',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser requests (curl, server-to-server, Meta webhooks have no Origin header)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS policy: origin not allowed'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256']
+}));
 app.use(express.json({
   verify: (req, res, buf) => {
     req.rawBody = buf;

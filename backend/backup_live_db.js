@@ -3,10 +3,17 @@ import path from 'path';
 
 async function backupLiveDb() {
   try {
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_PASSWORD || process.env.BACKUP_AUTH_PASSWORD;
+
+    if (!adminPassword) {
+      throw new Error('ADMIN_PASSWORD or BACKUP_AUTH_PASSWORD environment variable is required.');
+    }
+
     const authRes = await fetch('https://shastikachatbot.co.in/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'Shastika@2025' })
+      body: JSON.stringify({ username: adminUsername, password: adminPassword })
     });
     const auth = await authRes.json();
     if (!auth.token) {

@@ -49,7 +49,9 @@ async function runConnectionTests() {
     phone_number_id: '1429324643600789',
     whatsapp_phone_number: '919789090920',
     access_token: 'EAAWbZB2_VALID_TOKEN_HERE',
-    bot_enabled: true
+    bot_enabled: true,
+    is_default: true,
+    status: 'Active'
   };
 
   const dummy66265Connection = {
@@ -58,7 +60,9 @@ async function runConnectionTests() {
     phone_number_id: '1272367032630223',
     whatsapp_phone_number: '95662 66265',
     access_token: 'YOUR_NEW_TOKEN_HERE',
-    bot_enabled: true
+    bot_enabled: true,
+    is_default: false,
+    status: 'Unverified'
   };
 
   // Mock DB implementation to test priority & exclusions without touching production DB
@@ -93,9 +97,9 @@ async function runConnectionTests() {
           }
           return { rows: [] };
         }
-        // 5. Fallback query
-        if (normSql.includes("WHERE TRIM(PHONE_NUMBER_ID) = '1429324643600789'")) {
-          // Explicitly returns the verified connection (+91 97890 90920) and NEVER 66265
+        // 5. Fallback query (uses is_default = true or non-placeholder active connection)
+        if (normSql.includes("ORDER BY CASE WHEN IS_DEFAULT = TRUE THEN 0 ELSE 1 END") || normSql.includes("WHERE TRIM(PHONE_NUMBER_ID) = '1429324643600789'")) {
+          // Returns the default verified connection (+91 97890 90920) and NEVER 66265
           return { rows: [verifiedConnection] };
         }
         return { rows: [] };

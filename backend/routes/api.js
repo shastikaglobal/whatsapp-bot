@@ -18,52 +18,79 @@ import pool from '../config/db.js';
 
 const router = express.Router();
 
-// In-Memory Login Rate Limiter (10 attempts per 15 minutes per IP)
-const loginAttempts = new Map();
-const loginRateLimiter = (req, res, next) => {
-  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-  const now = Date.now();
-  const windowMs = 15 * 60 * 1000;
-  const maxAttempts = 10;
+// In-Memory Login Rate Limiter: max 5 failed attempts per 15 minutes per IP and username
+export const failedLoginAttempts = new Map();
+export const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+export const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 
-  const record = loginAttempts.get(ip) || { count: 0, firstAttempt: now };
-  if (now - record.firstAttempt > windowMs) {
+export const loginRateLimiter = (req, res, next) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const key = `${ip}_${username}`;
+  const now = Date.now();
+
+  const record = failedLoginAttempts.get(key);
+  if (record) {
+    if (now - record.firstAttempt > LOGIN_LOCKOUT_MS) {
+      failedLoginAttempts.delete(key);
+    } else if (record.count >= MAX_FAILED_LOGIN_ATTEMPTS) {
+      const remainingMinutes = Math.ceil((LOGIN_LOCKOUT_MS - (now - record.firstAttempt)) / 60000);
+      return res.status(429).json({ error: `Too many failed login attempts. Please try again after ${remainingMinutes} minutes.` });
+    }
+  }
+  next();
+};
+
+export const recordFailedLogin = (ip, username) => {
+  const key = `${ip}_${String(username || '').trim().toLowerCase()}`;
+  const now = Date.now();
+  const record = failedLoginAttempts.get(key) || { count: 0, firstAttempt: now };
+  if (now - record.firstAttempt > LOGIN_LOCKOUT_MS) {
     record.count = 1;
     record.firstAttempt = now;
   } else {
     record.count += 1;
   }
-  loginAttempts.set(ip, record);
+  failedLoginAttempts.set(key, record);
+};
 
-  if (record.count > maxAttempts) {
-    return res.status(429).json({ error: 'Too many login attempts. Please try again after 15 minutes.' });
-  }
-  next();
+export const resetFailedLogin = (ip, username) => {
+  const key = `${ip}_${String(username || '').trim().toLowerCase()}`;
+  failedLoginAttempts.delete(key);
 };
 
 // 1. Public Authentication Route
 router.post('/login', loginRateLimiter, async (req, res) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
   const { username, password } = req.body || {};
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
+  const genericError = 'Invalid username or password';
+
   try {
-    const { rows } = await pool.query('SELECT * FROM employees WHERE username = $1', [username.trim()]);
+    const { rows } = await pool.query('SELECT * FROM employees WHERE LOWER(username) = LOWER($1)', [username.trim()]);
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      recordFailedLogin(ip, username);
+      return res.status(401).json({ error: genericError });
     }
 
     const user = rows[0];
     if (user.status !== 'Active') {
-      return res.status(403).json({ error: 'Account is inactive or on leave' });
+      recordFailedLogin(ip, username);
+      return res.status(401).json({ error: genericError });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      recordFailedLogin(ip, username);
+      return res.status(401).json({ error: genericError });
     }
+
+    // Reset failed count on successful authentication
+    resetFailedLogin(ip, username);
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, name: user.name },
@@ -71,7 +98,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    console.log(`[Auth] User login successful: ${username} (${user.role})`);
+    console.log(`[Auth] User login successful: ${user.username} (${user.role})`);
     res.json({ token, role: user.role, name: user.name });
   } catch (error) {
     console.error('[Auth Error]:', error.message);
@@ -155,6 +182,7 @@ router.post('/whatsapp/config', authorizeAdmin, whatsappController.addConfig);
 router.put('/whatsapp/config/:id', authorizeAdmin, whatsappController.updateConfig);
 router.delete('/whatsapp/config/:id', authorizeAdmin, whatsappController.deleteConfig);
 router.patch('/whatsapp/bot-status/:id', authorizeAdmin, whatsappController.toggleBotStatus);
+router.patch('/whatsapp/default/:id', authorizeAdmin, whatsappController.setDefaultConnection);
 router.post('/whatsapp/test', authorizeAdmin, whatsappController.testConnection);
 
 export default router;

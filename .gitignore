@@ -56,6 +56,8 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.*
+*.env
 .env.test
 .env.local
 
@@ -93,6 +95,8 @@ backend/node_modules/
 /PortableGit.exe
 
 # Database backups and dumps
-backend/backups/
 *.sql
+*.dump
+backups/
+backend/backups/
 

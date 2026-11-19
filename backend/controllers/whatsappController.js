@@ -4,18 +4,22 @@ import crypto from 'crypto';
 
 const GRAPH_API_VERSION = 'v21.0';
 
+export const maskToken = (token) => {
+  if (!token || typeof token !== 'string') return '';
+  const trimmed = token.trim();
+  if (trimmed.length <= 8) return '****';
+  return `${trimmed.substring(0, 4)}...${trimmed.substring(trimmed.length - 4)}`;
+};
+
 export const getConfig = async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM whatsapp_connections ORDER BY created_at DESC');
+    const { rows } = await pool.query('SELECT * FROM whatsapp_connections ORDER BY is_default DESC, created_at DESC');
 
-    // Mask the access token for security
-    const configs = rows.map(row => {
-      let maskedToken = row.access_token;
-      if (maskedToken && maskedToken.length > 10) {
-        maskedToken = maskedToken.substring(0, 4) + '...[HIDDEN]...' + maskedToken.substring(maskedToken.length - 4);
-      }
-      return { ...row, access_token: maskedToken };
-    });
+    // Mask the access token for security (first 4 and last 4 characters)
+    const configs = rows.map(row => ({
+      ...row,
+      access_token: maskToken(row.access_token)
+    }));
 
     res.json(configs);
   } catch (error) {
@@ -71,9 +75,14 @@ export const updateConfig = async (req, res) => {
       params.push(bot_enabled);
     }
 
-    if (access_token && !access_token.includes('...[HIDDEN]...')) {
-      query += `, access_token = $${params.length + 1}`;
-      params.push(access_token.trim());
+    // Only accept and update access_token when admin provides a real new unmasked token
+    if (access_token && typeof access_token === 'string') {
+      const trimmedToken = access_token.trim();
+      const isMasked = trimmedToken.includes('...') || trimmedToken.includes('[HIDDEN]') || trimmedToken.includes('****');
+      if (!isMasked && trimmedToken.length > 15 && !trimmedToken.startsWith('YOUR_NEW')) {
+        query += `, access_token = $${params.length + 1}`;
+        params.push(trimmedToken);
+      }
     }
 
     query += ` WHERE id = $${params.length + 1}`;
@@ -93,6 +102,28 @@ export const updateConfig = async (req, res) => {
     } else {
       res.status(500).json({ error: 'Failed to update WhatsApp configuration.' });
     }
+  }
+};
+
+export const setDefaultConnection = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT id, phone_number_id, access_token, status FROM whatsapp_connections WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Connection not found.' });
+    }
+
+    if (rows[0].access_token?.startsWith('YOUR_NEW') || rows[0].status === 'Unverified') {
+      return res.status(400).json({ error: 'Cannot set an unverified connection with placeholder credentials as default.' });
+    }
+
+    await pool.query('UPDATE whatsapp_connections SET is_default = false');
+    await pool.query('UPDATE whatsapp_connections SET is_default = true WHERE id = $1', [id]);
+
+    res.json({ success: true, message: 'Connection set as default successfully.' });
+  } catch (error) {
+    console.error('Failed to set default connection:', error.message);
+    res.status(500).json({ error: 'Failed to set default connection.' });
   }
 };
 
@@ -130,7 +161,7 @@ export const testConnection = async (req, res) => {
   try {
     let { id, whatsapp_phone_number_id, whatsapp_access_token } = req.body;
 
-    if (id && (!whatsapp_access_token || whatsapp_access_token.includes('...[HIDDEN]...'))) {
+    if (id && (!whatsapp_access_token || whatsapp_access_token.includes('...'))) {
       const { rows } = await pool.query('SELECT access_token, phone_number_id FROM whatsapp_connections WHERE id = $1', [id]);
       if (rows.length > 0) {
         whatsapp_access_token = rows[0].access_token;
@@ -141,7 +172,18 @@ export const testConnection = async (req, res) => {
     }
 
     if (!whatsapp_phone_number_id || !whatsapp_access_token) {
-      return res.status(400).json({ error: 'Phone Number ID and Access Token are required to test connection.' });
+      return res.status(400).json({ success: false, error: 'Phone Number ID and Access Token are required to test connection.' });
+    }
+
+    if (whatsapp_access_token.startsWith('YOUR_NEW') || whatsapp_access_token.includes('placeholder')) {
+      if (id) {
+        await pool.query("UPDATE whatsapp_connections SET connection_status = 'Unverified', status = 'Unverified' WHERE id = $1", [id]);
+      }
+      return res.status(200).json({
+        success: false,
+        error: 'Connection is unverified. Token contains placeholder text (YOUR_NEW...). Please update with a valid Meta access token.',
+        details: { status: 'Unverified', reason: 'Placeholder Token' }
+      });
     }
 
     // Call Meta Graph API to verify credentials and verification status
@@ -158,9 +200,10 @@ export const testConnection = async (req, res) => {
     if (response.data && response.data.id) {
       const isVerified = response.data.code_verification_status === 'VERIFIED';
       const statusString = isVerified ? 'Connected' : 'Unverified';
+      const connectionStatus = isVerified ? 'Active' : 'Unverified';
 
       if (id) {
-        await pool.query('UPDATE whatsapp_connections SET connection_status = $1 WHERE id = $2', [statusString, id]);
+        await pool.query('UPDATE whatsapp_connections SET connection_status = $1, status = $2 WHERE id = $3', [statusString, connectionStatus, id]);
       }
 
       if (isVerified) {
@@ -170,28 +213,31 @@ export const testConnection = async (req, res) => {
           details: {
             display_phone_number: response.data.display_phone_number,
             verified_name: response.data.verified_name,
-            code_verification_status: response.data.code_verification_status
+            code_verification_status: response.data.code_verification_status,
+            quality_rating: response.data.quality_rating || 'UNKNOWN'
           }
         });
       } else {
         return res.json({
           success: false,
-          error: `Meta API credentials are valid, but number registration status is ${response.data.code_verification_status || 'NOT_VERIFIED'}. Phone number is active in WhatsApp Business app and not yet registered on Cloud API.`,
+          error: `Meta API credentials are valid, but number registration status is ${response.data.code_verification_status || 'NOT_VERIFIED'}.`,
           details: {
             display_phone_number: response.data.display_phone_number,
             verified_name: response.data.verified_name,
-            code_verification_status: response.data.code_verification_status
+            code_verification_status: response.data.code_verification_status,
+            quality_rating: response.data.quality_rating || 'UNKNOWN'
           }
         });
       }
     } else {
       if (id) {
-        await pool.query("UPDATE whatsapp_connections SET connection_status = 'Error' WHERE id = $1", [id]);
+        await pool.query("UPDATE whatsapp_connections SET connection_status = 'Error', status = 'Error' WHERE id = $1", [id]);
       }
-      return res.status(400).json({ error: 'Invalid response from Meta API.' });
+      return res.status(400).json({ success: false, error: 'Invalid response from Meta API.' });
     }
   } catch (error) {
     const metaError = error.response?.data?.error?.message;
+    const errorCode = error.response?.data?.error?.code;
     console.error('[WhatsApp testConnection error]:', metaError || error.message);
 
     let errorMessage = 'Failed to connect to Meta API. Please check your credentials.';
@@ -199,16 +245,16 @@ export const testConnection = async (req, res) => {
       if (metaError.includes('Cannot parse access token') || metaError.includes('Invalid OAuth access token')) {
         errorMessage = 'Invalid Access Token: Please check your Meta API access token.';
       } else {
-        errorMessage = `Meta API Error: ${metaError}`;
+        errorMessage = `Meta API Error (${errorCode || 'N/A'}): ${metaError}`;
       }
     }
 
     if (req.body.id) {
       try {
-        await pool.query("UPDATE whatsapp_connections SET connection_status = 'Error' WHERE id = $1", [req.body.id]);
+        await pool.query("UPDATE whatsapp_connections SET connection_status = 'Error', status = 'Error' WHERE id = $1", [req.body.id]);
       } catch (e) { }
     }
 
-    return res.status(200).json({ success: false, error: errorMessage });
+    return res.status(200).json({ success: false, error: errorMessage, code: errorCode || null });
   }
 };

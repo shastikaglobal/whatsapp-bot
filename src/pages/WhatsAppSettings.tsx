@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Plus, AlertCircle, CheckCircle2, ShieldCheck, HelpCircle, Edit2, Trash2, Power, PowerOff } from 'lucide-react';
+import { Save, Plus, AlertCircle, AlertTriangle, CheckCircle2, ShieldCheck, HelpCircle, Edit2, Trash2, Power, PowerOff, Star } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import api from '../api/axios';
 
@@ -13,6 +13,8 @@ interface WhatsAppConnection {
     access_token: string;
     bot_enabled: boolean;
     connection_status: string;
+    is_default?: boolean;
+    status?: string;
     updated_at?: string;
 }
 
@@ -20,6 +22,7 @@ export default function WhatsAppSettings() {
   const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; message?: string; error?: string; details?: any }>>({});
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,8 +142,19 @@ export default function WhatsAppSettings() {
       });
   };
 
+  const handleSetDefault = async (id: string) => {
+    try {
+      const res = await api.patch(`/whatsapp/default/${id}`);
+      showToast(res.data?.message || 'Connection set as default successfully', 'success');
+      fetchConfigs();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to set default connection', 'error');
+    }
+  };
+
   const handleTestConnection = async (id?: string) => {
     setTesting(true);
+    const targetKey = id || 'modal';
     try {
       const payload = id 
         ? { id } 
@@ -152,6 +166,16 @@ export default function WhatsAppSettings() {
       
       const res = await api.post('/whatsapp/test', payload);
       
+      setTestResults(prev => ({
+        ...prev,
+        [targetKey]: {
+          success: !!res.data.success,
+          message: res.data.message,
+          error: res.data.error,
+          details: res.data.details
+        }
+      }));
+
       if (res.data.success) {
         showToast('Connection test successful!', 'success');
         if (!id) {
@@ -160,15 +184,23 @@ export default function WhatsAppSettings() {
             fetchConfigs();
         }
       } else {
-        showToast(res.data.error || 'Connection failed', 'error');
+        showToast(res.data.error || 'Connection verification failed', 'error');
         if (!id) {
-            setCurrentConnection(prev => ({...prev, connection_status: 'Error'}));
+            setCurrentConnection(prev => ({...prev, connection_status: 'Unverified'}));
         } else {
             fetchConfigs();
         }
       }
     } catch (err: any) {
-      showToast(err.response?.data?.error || 'Connection failed', 'error');
+      const errMsg = err.response?.data?.error || err.message || 'Connection failed';
+      setTestResults(prev => ({
+        ...prev,
+        [targetKey]: {
+          success: false,
+          error: errMsg
+        }
+      }));
+      showToast(errMsg, 'error');
       if (!id) {
         setCurrentConnection(prev => ({...prev, connection_status: 'Error'}));
       } else {
@@ -231,12 +263,33 @@ export default function WhatsAppSettings() {
                   <div key={conn.id} className="panel-card flex flex-col hover:border-blue-200 transition-colors">
                       <div className="flex justify-between items-start mb-4">
                           <div>
-                              <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                                  {conn.display_name}
-                              </h3>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="font-bold text-slate-800 text-lg">
+                                      {conn.display_name}
+                                  </h3>
+                                  {conn.is_default && (
+                                    <span className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> Default
+                                    </span>
+                                  )}
+                                  {(conn.status === 'Unverified' || conn.access_token?.startsWith('YOUR_NEW')) && (
+                                    <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                                      <AlertTriangle className="w-3 h-3 text-rose-600" /> Unverified
+                                    </span>
+                                  )}
+                              </div>
                               <p className="text-sm text-slate-500 font-mono mt-1">{conn.whatsapp_phone_number}</p>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex items-center gap-2">
+                              {!conn.is_default && conn.status !== 'Unverified' && !conn.access_token?.startsWith('YOUR_NEW') && (
+                                <button 
+                                  onClick={() => handleSetDefault(conn.id!)} 
+                                  className="text-xs px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-medium transition-colors"
+                                  title="Set as Default Connection"
+                                >
+                                  Set as default
+                                </button>
+                              )}
                               <button onClick={() => handleTestConnection(conn.id)} className="p-1.5 text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded" title="Test Connection">
                                   <ShieldCheck className="w-4 h-4" />
                               </button>
@@ -259,6 +312,25 @@ export default function WhatsAppSettings() {
                               <span className="font-medium">{conn.bot_enabled ? 'Bot Active' : 'Bot Temporarily Disabled'}</span>
                           </div>
                       </div>
+
+                      {testResults[conn.id!] && (
+                        <div className={`p-3 rounded-lg border text-xs mb-4 ${testResults[conn.id!].success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                          <div className="font-semibold flex items-center gap-1.5 mb-1">
+                            {testResults[conn.id!].success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                            {testResults[conn.id!].success ? 'Meta Cloud API Verified' : 'Meta Cloud API Verification Failed'}
+                          </div>
+                          {testResults[conn.id!].message && <p>{testResults[conn.id!].message}</p>}
+                          {testResults[conn.id!].error && <p>{testResults[conn.id!].error}</p>}
+                          {testResults[conn.id!].details && (
+                            <div className="mt-1.5 font-mono text-[11px] text-slate-700 space-y-0.5 bg-white/70 p-2 rounded border border-slate-200/60">
+                              {testResults[conn.id!].details.display_phone_number && <div>Phone: {testResults[conn.id!].details.display_phone_number}</div>}
+                              {testResults[conn.id!].details.verified_name && <div>Verified Name: {testResults[conn.id!].details.verified_name}</div>}
+                              {testResults[conn.id!].details.code_verification_status && <div>Status: {testResults[conn.id!].details.code_verification_status}</div>}
+                              {testResults[conn.id!].details.quality_rating && <div>Quality Rating: {testResults[conn.id!].details.quality_rating}</div>}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="text-xs text-slate-400 font-mono mb-4 flex-1">
                           ID: {conn.phone_number_id}
@@ -404,6 +476,25 @@ export default function WhatsAppSettings() {
                             <div className="w-11 h-6 bg-blue-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                     </div>
+
+                    {testResults['modal'] && (
+                      <div className={`p-3 rounded-lg border text-xs ${testResults['modal'].success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                        <div className="font-semibold flex items-center gap-1.5 mb-1">
+                          {testResults['modal'].success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                          {testResults['modal'].success ? 'Meta API Connection Verified' : 'Meta API Connection Failed'}
+                        </div>
+                        {testResults['modal'].message && <p>{testResults['modal'].message}</p>}
+                        {testResults['modal'].error && <p>{testResults['modal'].error}</p>}
+                        {testResults['modal'].details && (
+                          <div className="mt-1 font-mono text-[11px] text-slate-700 space-y-0.5 bg-white/70 p-2 rounded border border-slate-200/60">
+                            {testResults['modal'].details.display_phone_number && <div>Phone: {testResults['modal'].details.display_phone_number}</div>}
+                            {testResults['modal'].details.verified_name && <div>Verified Name: {testResults['modal'].details.verified_name}</div>}
+                            {testResults['modal'].details.code_verification_status && <div>Status: {testResults['modal'].details.code_verification_status}</div>}
+                            {testResults['modal'].details.quality_rating && <div>Quality Rating: {testResults['modal'].details.quality_rating}</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-6 border-t border-slate-100 flex justify-between bg-slate-50 rounded-b-2xl">

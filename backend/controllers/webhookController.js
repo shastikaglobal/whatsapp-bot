@@ -474,6 +474,46 @@ export function matchAutoReplyRule(text, rules) {
   return bestRule;
 }
 
+/**
+ * Verifies X-Hub-Signature-256 with Meta App Secret.
+ * Enforces signature validation when appSecret is configured or when REQUIRE_WEBHOOK_SIGNATURE=true.
+ * When secret is not configured, logs warning and allows webhook so incoming messages are not blocked (no 401).
+ */
+export function verifyMetaSignature(rawBody, signatureHeader, appSecret, isProduction = (process.env.NODE_ENV === 'production')) {
+  const requireExplicit = process.env.REQUIRE_WEBHOOK_SIGNATURE === 'true';
+
+  if (!appSecret) {
+    if (requireExplicit) {
+      return { valid: false, reason: 'META_APP_SECRET is required by REQUIRE_WEBHOOK_SIGNATURE=true but not configured' };
+    }
+    // Safe default when secret is not configured on VPS: log warning and allow through without 401
+    return { valid: true, skipped: true, reason: 'META_APP_SECRET not configured; signature verification skipped with warning' };
+  }
+
+  if (!signatureHeader) {
+    return { valid: false, reason: 'Missing X-Hub-Signature-256 header' };
+  }
+
+  if (!rawBody) {
+    return { valid: false, reason: 'Missing raw request body' };
+  }
+
+  try {
+    const hmac = crypto.createHmac('sha256', appSecret);
+    const digest = 'sha256=' + hmac.update(rawBody).digest('hex');
+    const sigBuffer = Buffer.from(signatureHeader.trim(), 'utf8');
+    const digestBuffer = Buffer.from(digest, 'utf8');
+
+    if (sigBuffer.length !== digestBuffer.length || !crypto.timingSafeEqual(sigBuffer, digestBuffer)) {
+      return { valid: false, reason: 'Invalid X-Hub-Signature-256 signature' };
+    }
+
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, reason: err.message };
+  }
+}
+
 export const verifyWebhook = async (req, res) => {
   try {
     const mode = req.query['hub.mode'];
@@ -484,10 +524,12 @@ export const verifyWebhook = async (req, res) => {
       // Check verify token against env or bot_settings
       let expectedToken = process.env.WHATSAPP_VERIFY_TOKEN;
       if (!expectedToken) {
-        const { rows } = await pool.query(
-          "SELECT setting_value FROM bot_settings WHERE setting_key = 'whatsapp_verify_token'"
-        );
-        if (rows.length > 0) expectedToken = rows[0].setting_value;
+        try {
+          const { rows } = await pool.query(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = 'whatsapp_verify_token'"
+          );
+          if (rows.length > 0 && rows[0].setting_value) expectedToken = rows[0].setting_value.trim();
+        } catch (e) { /* ignore */ }
       }
 
       if (mode === 'subscribe' && expectedToken && String(token).trim() === String(expectedToken).trim()) {
@@ -507,7 +549,7 @@ export const verifyWebhook = async (req, res) => {
 
 export const handleIncomingMessage = async (req, res) => {
   try {
-    // 0. Verify Signature if META_APP_SECRET is configured in env or DB
+    // 0. Verify Signature if META_APP_SECRET is configured in env or DB (enforced in production)
     let appSecret = process.env.META_APP_SECRET;
     if (!appSecret) {
       try {
@@ -520,20 +562,11 @@ export const handleIncomingMessage = async (req, res) => {
       } catch (e) { /* ignore */ }
     }
 
-    if (appSecret && req.rawBody) {
-      const signatureHeader = req.headers['x-hub-signature-256'];
-      if (!signatureHeader) {
-        console.warn('[Webhook Security] Missing X-Hub-Signature-256 header');
-        return res.sendStatus(401);
-      }
-      const hmac = crypto.createHmac('sha256', appSecret);
-      const digest = 'sha256=' + hmac.update(req.rawBody).digest('hex');
-      const sigBuffer = Buffer.from(signatureHeader.trim(), 'utf8');
-      const digestBuffer = Buffer.from(digest, 'utf8');
-      if (sigBuffer.length !== digestBuffer.length || !crypto.timingSafeEqual(sigBuffer, digestBuffer)) {
-        console.warn('[Webhook Security] Invalid X-Hub-Signature-256 signature');
-        return res.sendStatus(401);
-      }
+    const signatureHeader = req.headers['x-hub-signature-256'];
+    const sigCheck = verifyMetaSignature(req.rawBody, signatureHeader, appSecret);
+    if (!sigCheck.valid) {
+      console.warn(`[Webhook Security] Rejected incoming webhook: ${sigCheck.reason}`);
+      return res.status(401).json({ error: 'Unauthorized: ' + sigCheck.reason });
     }
 
     const body = req.body;

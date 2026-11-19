@@ -60,4 +60,19 @@ pool.query(`
   console.warn('[DB Schema Migration Notice]:', err.message);
 });
 
+// Safe, idempotent schema migration for whatsapp_connections (is_default, status)
+pool.query(`
+  ALTER TABLE whatsapp_connections ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false;
+  ALTER TABLE whatsapp_connections ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Active';
+  UPDATE whatsapp_connections 
+  SET is_default = true 
+  WHERE (whatsapp_phone_number LIKE '%9789090920%' OR phone_number_id = '1429324643600789')
+    AND NOT EXISTS (SELECT 1 FROM whatsapp_connections WHERE is_default = true);
+  UPDATE whatsapp_connections 
+  SET status = 'Unverified', connection_status = 'Unverified'
+  WHERE access_token LIKE 'YOUR_NEW%' OR access_token = '' OR access_token IS NULL;
+`).catch(err => {
+  console.warn('[DB Schema Migration Notice]:', err.message);
+});
+
 export default pool;
