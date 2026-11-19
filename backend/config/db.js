@@ -53,4 +53,11 @@ pool.query(`
   console.warn('[DB Schema Migration Notice]:', err.message);
 });
 
+// Safe, idempotent schema migration for messages.failure_reason
+pool.query(`
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS failure_reason TEXT;
+`).catch(err => {
+  console.warn('[DB Schema Migration Notice]:', err.message);
+});
+
 export default pool;

@@ -104,6 +104,103 @@ export const getMessages = async (req, res) => {
   }
 };
 
+/**
+ * Resolves the appropriate WhatsApp connection credentials for an outgoing message.
+ * Prioritizes:
+ *  1. Explicitly provided phoneNumberId (if valid and not placeholder)
+ *  2. Conversation's assigned phone_number_id
+ *  3. Customer's previous messages' phone_number_id
+ *  4. Fallback to active verified connection (+91 97890 90920, Phone Number ID 1429324643600789)
+ * NEVER uses the unverified 66265 connection (1272367032630223) or dummy placeholder tokens.
+ */
+export const resolveWhatsAppConnection = async (explicitPhoneId, convId, customerId, db = pool) => {
+  let actualPhoneId = explicitPhoneId ? String(explicitPhoneId).trim() : null;
+  let resolvedConvId = convId || null;
+
+  // 1. If not provided, check conversation by convId
+  if (!actualPhoneId && resolvedConvId) {
+    const { rows: cRows } = await db.query(
+      'SELECT id, phone_number_id FROM conversations WHERE id = $1',
+      [resolvedConvId]
+    );
+    if (cRows.length > 0 && cRows[0].phone_number_id) {
+      actualPhoneId = String(cRows[0].phone_number_id).trim();
+    }
+  }
+
+  // 2. Check customer's latest conversation
+  if (!actualPhoneId && customerId) {
+    const { rows: convRows } = await db.query(
+      "SELECT id, phone_number_id FROM conversations WHERE customer_id = $1 AND phone_number_id IS NOT NULL AND TRIM(phone_number_id) != '' ORDER BY updated_at DESC LIMIT 1",
+      [customerId]
+    );
+    if (convRows.length > 0 && convRows[0].phone_number_id) {
+      actualPhoneId = String(convRows[0].phone_number_id).trim();
+      resolvedConvId = resolvedConvId || convRows[0].id;
+    }
+  }
+
+  // 3. Check customer's latest message with phone_number_id
+  if (!actualPhoneId && customerId) {
+    const { rows: msgRows } = await db.query(
+      "SELECT phone_number_id FROM messages WHERE customer_id = $1 AND phone_number_id IS NOT NULL AND TRIM(phone_number_id) != '' ORDER BY timestamp DESC LIMIT 1",
+      [customerId]
+    );
+    if (msgRows.length > 0 && msgRows[0].phone_number_id) {
+      actualPhoneId = String(msgRows[0].phone_number_id).trim();
+    }
+  }
+
+  // 4. Resolve connection credentials for actualPhoneId
+  // Exclude placeholder tokens (e.g. YOUR_NEW_TOKEN_HERE) and unverified 66265 connection (1272367032630223)
+  let connection = null;
+  if (actualPhoneId && actualPhoneId !== '1272367032630223') {
+    const { rows: connRows } = await db.query(
+      `SELECT id, display_name, phone_number_id, whatsapp_phone_number, access_token 
+       FROM whatsapp_connections 
+       WHERE TRIM(phone_number_id) = $1 
+         AND access_token NOT LIKE 'YOUR_NEW%'`,
+      [actualPhoneId]
+    );
+    if (connRows.length > 0) {
+      connection = connRows[0];
+    }
+  }
+
+  // 5. Fallback: Always use the verified active connection (+91 97890 90920, Phone Number ID 1429324643600789)
+  // NEVER use the unverified 66265 connection (1272367032630223)
+  if (!connection) {
+    const { rows: defaultRows } = await db.query(
+      `SELECT id, display_name, phone_number_id, whatsapp_phone_number, access_token 
+       FROM whatsapp_connections 
+       WHERE TRIM(phone_number_id) = '1429324643600789'
+          OR (TRIM(phone_number_id) != '1272367032630223' 
+              AND access_token NOT LIKE 'YOUR_NEW%' 
+              AND bot_enabled = true)
+       ORDER BY CASE WHEN TRIM(phone_number_id) = '1429324643600789' THEN 0 ELSE 1 END, created_at DESC 
+       LIMIT 1`
+    );
+    if (defaultRows.length > 0) {
+      connection = defaultRows[0];
+      actualPhoneId = connection.phone_number_id;
+    } else if (process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN) {
+      actualPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      connection = {
+        phone_number_id: actualPhoneId,
+        access_token: process.env.WHATSAPP_ACCESS_TOKEN,
+        display_name: 'Environment Default'
+      };
+    }
+  }
+
+  return {
+    phoneNumberId: actualPhoneId,
+    accessToken: connection?.access_token || null,
+    convId: resolvedConvId,
+    connection
+  };
+};
+
 export const sendMessage = async (req, res) => {
   try {
     const { customerId, conversationId, phoneNumberId: explicitPhoneId, content } = req.body;
@@ -126,74 +223,61 @@ export const sendMessage = async (req, res) => {
 
     const phone = custRows[0].phone;
 
-    // 2. Identify receiving phone number ID for this conversation
-    let actualPhoneId = explicitPhoneId || null;
-    let convId = conversationId || null;
+    // 2. Resolve WhatsApp connection (same connection as conversation/messages, or verified 1429324643600789)
+    const { phoneNumberId: actualPhoneId, accessToken, convId: resolvedConvId } = await resolveWhatsAppConnection(
+      explicitPhoneId,
+      conversationId,
+      customerId
+    );
+    const convId = resolvedConvId || conversationId || null;
 
-    if (!actualPhoneId && convId) {
-      const { rows: cRows } = await pool.query(
-        'SELECT id, phone_number_id FROM conversations WHERE id = $1',
-        [convId]
-      );
-      if (cRows.length > 0) {
-        actualPhoneId = cRows[0].phone_number_id;
-      }
-    }
-
-    if (!actualPhoneId) {
-      const { rows: convRows } = await pool.query(
-        'SELECT id, phone_number_id FROM conversations WHERE customer_id = $1 ORDER BY updated_at DESC LIMIT 1',
-        [customerId]
-      );
-      if (convRows.length > 0) {
-        actualPhoneId = convRows[0].phone_number_id;
-        convId = convId || convRows[0].id;
-      }
-    }
-
-    // 3. Resolve connection credentials for this phone_number_id
-    let accessToken = null;
-    if (actualPhoneId) {
-      const { rows: connRows } = await pool.query(
-        'SELECT phone_number_id, access_token FROM whatsapp_connections WHERE TRIM(phone_number_id) = $1',
-        [String(actualPhoneId).trim()]
-      );
-      if (connRows.length > 0) {
-        accessToken = connRows[0].access_token;
-      }
-    }
-
-    // Fallback to active connection if not set on conversation
-    if (!accessToken) {
-      const { rows: defaultRows } = await pool.query(
-        'SELECT phone_number_id, access_token FROM whatsapp_connections WHERE bot_enabled = true ORDER BY created_at ASC LIMIT 1'
-      );
-      if (defaultRows.length > 0) {
-        actualPhoneId = actualPhoneId || defaultRows[0].phone_number_id;
-        accessToken = defaultRows[0].access_token;
-      } else if (process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN) {
-        actualPhoneId = actualPhoneId || process.env.WHATSAPP_PHONE_NUMBER_ID;
-        accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-      }
-    }
-
-    // 4. Send via Meta WhatsApp Cloud API
+    // 3. Send via Meta WhatsApp Cloud API
     const sendResult = await sendWhatsAppMessage(phone, content, actualPhoneId, accessToken);
 
-    // Handle Meta API errors: NEVER simulate success when call fails
+    const senderTag = req.user?.name || (String(req.user?.role || '').toLowerCase() === 'admin' ? 'Admin' : 'BDE');
+
+    // Handle Meta API errors: Save message as 'failed' with failure reason and return error
     if (!sendResult || sendResult.error) {
+      const errorCode = sendResult?.code || 'ERROR';
       const errMsg = sendResult?.message || 'Meta Cloud API rejected the outgoing message';
-      console.error(`[Manual Send Failed] Customer: ${customerId}, Error: ${errMsg}`);
+      const failureReason = sendResult?.code ? `${sendResult.code}: ${sendResult.message}` : errMsg;
+
+      const failedMsgId = `failed_${crypto.randomUUID()}`;
+
+      try {
+        await pool.query(
+          `INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id, failure_reason)
+           VALUES ($1, $2, $3, $4, 'failed', $5, $6)`,
+          [failedMsgId, customerId, senderTag, content, actualPhoneId, failureReason]
+        );
+      } catch (insertErr) {
+        await pool.query(
+          `INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id)
+           VALUES ($1, $2, $3, $4, 'failed', $5)`,
+          [failedMsgId, customerId, senderTag, content, actualPhoneId]
+        );
+      }
+
+      // Update conversation timestamp so failed send is tracked
+      if (convId) {
+        await pool.query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [convId]);
+      } else {
+        await pool.query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE customer_id = $1', [customerId]);
+      }
+
+      console.error(`[Manual Send Failed] Customer: ${customerId}, PhoneID: ${actualPhoneId}, Code: ${errorCode}, Reason: ${errMsg}`);
       return res.status(400).json({
         success: false,
         error: errMsg,
+        code: errorCode,
+        messageId: failedMsgId,
+        failure_reason: failureReason,
         details: sendResult?.details || null
       });
     }
 
-    // 5. Save to DB ONLY on real Meta API success
+    // 4. Save to DB on real Meta API success
     const metaMsgId = sendResult.messages?.[0]?.id || `msg_${crypto.randomUUID()}`;
-    const senderTag = req.user?.name || (String(req.user?.role || '').toLowerCase() === 'admin' ? 'Admin' : 'BDE');
     await pool.query(
       'INSERT INTO messages (id, customer_id, sender, content, status, phone_number_id) VALUES ($1, $2, $3, $4, $5, $6)',
       [metaMsgId, customerId, senderTag, content, 'sent', actualPhoneId]
@@ -207,7 +291,7 @@ export const sendMessage = async (req, res) => {
       );
     }
 
-    // 6. Update conversation timestamp
+    // 5. Update conversation timestamp
     if (convId) {
       await pool.query(
         'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
@@ -220,6 +304,7 @@ export const sendMessage = async (req, res) => {
       );
     }
 
+    console.log(`[Manual Send Succeeded] Message ${metaMsgId} dispatched to ${phone} via PhoneID ${actualPhoneId}`);
     res.json({ success: true, message: 'Message sent successfully', messageId: metaMsgId });
   } catch (error) {
     console.error('Send message error:', error.message);

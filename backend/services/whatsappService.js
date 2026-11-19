@@ -32,7 +32,13 @@ export const sendWhatsAppMessage = async (to, text, phoneNumberId = null, access
       
       if (!phoneNumberId || !accessToken) {
         const { rows } = await pool.query(
-          'SELECT phone_number_id, access_token FROM whatsapp_connections WHERE bot_enabled = true ORDER BY created_at ASC LIMIT 1'
+          `SELECT phone_number_id, access_token FROM whatsapp_connections 
+           WHERE TRIM(phone_number_id) = '1429324643600789'
+              OR (TRIM(phone_number_id) != '1272367032630223' 
+                  AND access_token NOT LIKE 'YOUR_NEW%' 
+                  AND bot_enabled = true)
+           ORDER BY CASE WHEN TRIM(phone_number_id) = '1429324643600789' THEN 0 ELSE 1 END, created_at DESC 
+           LIMIT 1`
         );
         if (rows.length > 0) {
           phoneNumberId = phoneNumberId || rows[0].phone_number_id;

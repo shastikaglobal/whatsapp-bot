@@ -562,17 +562,28 @@ export const handleIncomingMessage = async (req, res) => {
         const newStatus = statusUpdate.status;
         console.log(`[Webhook Status] Message ${statusMsgId} -> ${newStatus}`);
         
-        try {
-          await pool.query(
-            'UPDATE messages SET status = $1 WHERE id = $2',
-            [newStatus, statusMsgId]
-          );
-        } catch (dbErr) {
-          console.error('[Webhook Status DB Error]:', dbErr.message);
-        }
-
         if (newStatus === 'failed') {
-          console.warn(`[Webhook Delivery Failed] Message ${statusMsgId} failed. Errors:`, statusUpdate.errors || 'N/A');
+          const errors = statusUpdate.errors || [];
+          const firstErr = errors[0];
+          const failureReason = firstErr ? `${firstErr.code}: ${firstErr.message || firstErr.title || 'Delivery failed'}` : 'Delivery failed';
+          console.warn(`[Webhook Delivery Failed] Message ${statusMsgId} failed. Reason: ${failureReason}`);
+          try {
+            await pool.query(
+              'UPDATE messages SET status = $1, failure_reason = $2 WHERE id = $3',
+              [newStatus, failureReason, statusMsgId]
+            );
+          } catch (dbErr) {
+            await pool.query('UPDATE messages SET status = $1 WHERE id = $2', [newStatus, statusMsgId]);
+          }
+        } else {
+          try {
+            await pool.query(
+              'UPDATE messages SET status = $1 WHERE id = $2',
+              [newStatus, statusMsgId]
+            );
+          } catch (dbErr) {
+            console.error('[Webhook Status DB Error]:', dbErr.message);
+          }
         }
       }
       

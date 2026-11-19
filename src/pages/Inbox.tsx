@@ -16,6 +16,7 @@ interface Conversation {
   intent?: string;
   is_important?: boolean;
   requires_admin_attention?: boolean;
+  phone_number_id?: string;
 }
 
 interface Message {
@@ -24,12 +25,22 @@ interface Message {
   sender: string;
   content: string;
   timestamp: string;
+  status?: string;
+  failure_reason?: string;
+  phone_number_id?: string;
 }
 
 export default function Inbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
   const [inputMessage, setInputMessage] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'needs_human' | 'bot_active' | 'resolved'>('all');
@@ -94,12 +105,15 @@ export default function Inbox() {
   };
 
   const fetchMessages = async (customerId: string) => {
+    setIsMessagesLoading(true);
     try {
       const res = await api.get(`/messages/${customerId}`);
       setMessages(res.data);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsMessagesLoading(false);
     }
   };
 
@@ -162,11 +176,20 @@ export default function Inbox() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
 
     try {
-      await api.post('/whatsapp/send', { customerId: selectedConvo.customer_id, content: tempMsg });
+      await api.post('/whatsapp/send', {
+        customerId: selectedConvo.customer_id,
+        conversationId: selectedConvo.id,
+        phoneNumberId: selectedConvo.phone_number_id,
+        content: tempMsg
+      });
       fetchMessages(selectedConvo.customer_id);
       fetchConversations();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send', err);
+      const errMsg = err.response?.data?.error || err.message || 'Failed to deliver message via WhatsApp';
+      showToast(`Not delivered: ${errMsg}`, 'error');
+      fetchMessages(selectedConvo.customer_id);
+      fetchConversations();
     }
   };
 
@@ -412,6 +435,21 @@ export default function Inbox() {
             </div>
           </div>
 
+          {/* Toast Notification Banner */}
+          {toast && (
+            <div className={`px-4 py-2.5 text-xs font-semibold flex items-center justify-between border-b shrink-0 ${
+              toast.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{toast.message}</span>
+              </div>
+              <button onClick={() => setToast(null)} className="text-rose-500 hover:text-rose-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.map((msg, idx) => {
@@ -420,6 +458,7 @@ export default function Inbox() {
                 <div key={msg.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[70%] rounded-xl px-4 py-3 shadow-sm ${
                     msg.sender === 'user' || msg.sender === 'customer' ? 'bg-white text-slate-800 rounded-tl-sm' :
+                    msg.status === 'failed' ? 'bg-rose-50 border border-rose-200 text-slate-800 rounded-tr-sm' :
                     msg.sender === 'ai' ? 'bg-[#d9fdd3] text-slate-800 rounded-tr-sm' :
                     'bg-[#d9fdd3] text-slate-800 rounded-tr-sm'
                   }`}>
@@ -434,6 +473,12 @@ export default function Inbox() {
                       ) : null}
                       <span>{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
+                    {msg.status === 'failed' && (
+                      <div className="text-[11px] text-red-600 font-semibold mt-1.5 pt-1.5 border-t border-rose-200 flex items-center gap-1 justify-end">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                        <span>Not delivered: {msg.failure_reason || 'Failed to send'}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -443,81 +488,124 @@ export default function Inbox() {
 
           {/* Input Area */}
           <div className="p-4 bg-[#f0f2f5] shrink-0 relative z-10 border-t border-slate-200">
-            {selectedConvo.status === 'handover' ? (
-              <div className="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-800">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <User className="w-3.5 h-3.5 text-amber-600" />
-                  Bot paused for this customer. You are in manual reply mode.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleTakeover('open')}
-                  className="font-bold text-blue-600 hover:underline flex items-center gap-1"
-                >
-                  <Bot className="w-3.5 h-3.5" /> Resume Bot
-                </button>
-              </div>
-            ) : (
-              <div className="mb-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <Bot className="w-3.5 h-3.5 text-blue-600" />
-                  AI Bot is active. Typing a reply here will pause the bot and switch to manual takeover.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleTakeover('handover')}
-                  className="font-bold text-amber-700 hover:underline flex items-center gap-1"
-                >
-                  <User className="w-3.5 h-3.5" /> Pause Bot Now
-                </button>
-              </div>
-            )}
-            <form onSubmit={handleSendMessage} className="flex items-end gap-2 relative">
-              {/* WhatsApp Style Emoji Picker Popover */}
-              {isEmojiPickerOpen && (
-                <EmojiPicker 
-                  onSelect={insertEmoji} 
-                  onClose={() => setIsEmojiPickerOpen(false)} 
-                />
-              )}
+            {/* 24-Hour WhatsApp Window Closed Warning */}
+            {(() => {
+              const lastCustomerMsg = [...messages].reverse().find(m => m.sender === 'customer' || m.sender === 'user');
+              const isWindowClosed = Boolean(
+                !isMessagesLoading && selectedConvo && (
+                  !lastCustomerMsg || (Date.now() - new Date(lastCustomerMsg.timestamp).getTime()) > 24 * 60 * 60 * 1000
+                )
+              );
 
-              {/* Emoji Picker Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setIsEmojiPickerOpen(prev => !prev)}
-                className={`h-[44px] w-[44px] flex items-center justify-center rounded-xl border transition-all shrink-0 cursor-pointer ${
-                  isEmojiPickerOpen 
-                    ? 'bg-emerald-50 border-emerald-400 text-emerald-600 shadow-sm' 
-                    : 'bg-white border-slate-300 text-slate-500 hover:text-emerald-600 hover:border-emerald-400 shadow-sm'
-                }`}
-                title="Add Emoji (WhatsApp style)"
-              >
-                <Smile className="w-5 h-5" />
-              </button>
+              return (
+                <>
+                  {isWindowClosed && (
+                    <div className="mb-2 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-700 font-medium">
+                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                      <span>24 hour window closed, free text cannot be sent, use an approved template</span>
+                    </div>
+                  )}
 
-              <textarea 
-                ref={textareaRef}
-                value={inputMessage}
-                onChange={e => setInputMessage(e.target.value)}
-                placeholder={selectedConvo.status === 'handover' ? "Type a reply as human BDE..." : "Type reply (sending will pause bot and take over)..."}
-                className="flex-1 max-h-32 min-h-[44px] bg-white rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm text-slate-900 font-medium placeholder:text-slate-400 caret-emerald-600 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                rows={1}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e);
-                  }
-                }}
-              />
-              <button 
-                type="submit"
-                disabled={!inputMessage.trim()}
-                className="h-[44px] px-5 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all shrink-0 shadow-sm hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] cursor-pointer"
-              >
-                <Send className="w-4 h-4 ml-0.5" />
-                <span>Send</span>
-              </button>
-            </form>
+                  {selectedConvo.status === 'handover' ? (
+                    <div className="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-800">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <User className="w-3.5 h-3.5 text-amber-600" />
+                        Bot paused for this customer. You are in manual reply mode.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleTakeover('open')}
+                        className="font-bold text-blue-600 hover:underline flex items-center gap-1"
+                      >
+                        <Bot className="w-3.5 h-3.5" /> Resume Bot
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mb-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Bot className="w-3.5 h-3.5 text-blue-600" />
+                        AI Bot is active. Typing a reply here will pause the bot and switch to manual takeover.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleTakeover('handover')}
+                        className="font-bold text-amber-700 hover:underline flex items-center gap-1"
+                      >
+                        <User className="w-3.5 h-3.5" /> Pause Bot Now
+                      </button>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSendMessage} className="flex items-end gap-2 relative">
+                    {/* WhatsApp Style Emoji Picker Popover */}
+                    {isEmojiPickerOpen && (
+                      <EmojiPicker 
+                        onSelect={insertEmoji} 
+                        onClose={() => setIsEmojiPickerOpen(false)} 
+                      />
+                    )}
+
+                    {/* Emoji Picker Toggle Button */}
+                    <button
+                      type="button"
+                      disabled={isWindowClosed}
+                      onClick={() => setIsEmojiPickerOpen(prev => !prev)}
+                      className={`h-[44px] w-[44px] flex items-center justify-center rounded-xl border transition-all shrink-0 ${
+                        isWindowClosed
+                          ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                          : isEmojiPickerOpen 
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-600 shadow-sm cursor-pointer' 
+                            : 'bg-white border-slate-300 text-slate-500 hover:text-emerald-600 hover:border-emerald-400 shadow-sm cursor-pointer'
+                      }`}
+                      title="Add Emoji"
+                    >
+                      <Smile className="w-5 h-5" />
+                    </button>
+
+                    <textarea 
+                      ref={textareaRef}
+                      value={inputMessage}
+                      disabled={isWindowClosed}
+                      onChange={e => setInputMessage(e.target.value)}
+                      placeholder={
+                        isWindowClosed 
+                          ? "24 hour window closed, free text cannot be sent, use an approved template" 
+                          : selectedConvo.status === 'handover' 
+                            ? "Type a reply as human BDE..." 
+                            : "Type reply (sending will pause bot and take over)..."
+                      }
+                      className={`flex-1 max-h-32 min-h-[44px] rounded-xl px-4 py-2.5 focus:outline-none shadow-sm resize-none text-sm font-medium border transition-colors ${
+                        isWindowClosed
+                          ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                          : "bg-white text-slate-900 border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-slate-400 caret-emerald-600"
+                      }`}
+                      rows={1}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          if (!isWindowClosed) {
+                            handleSendMessage(e);
+                          }
+                        }
+                      }}
+                    />
+                    <button 
+                      type="submit"
+                      disabled={!inputMessage.trim() || isWindowClosed}
+                      title={isWindowClosed ? "24 hour window closed, free text cannot be sent, use an approved template" : "Send reply"}
+                      className={`h-[44px] px-5 flex items-center justify-center gap-1.5 rounded-xl font-semibold text-sm transition-all shrink-0 shadow-sm ${
+                        isWindowClosed
+                          ? "bg-slate-300 text-slate-500 cursor-not-allowed opacity-60"
+                          : "bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] cursor-pointer"
+                      }`}
+                    >
+                      <Send className="w-4 h-4 ml-0.5" />
+                      <span>Send</span>
+                    </button>
+                  </form>
+                </>
+              );
+            })()}
           </div>
 
         </div>
