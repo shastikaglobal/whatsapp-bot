@@ -30,7 +30,7 @@ pool.on('error', (err) => {
   console.error('Unexpected database connection error:', err.message);
 });
 
-// Safe, non-destructive schema migration for products.moq column
+// Safe, non-destructive schema migration for products.moq and products.updated_at
 pool.query(`
   DO $$
   BEGIN
@@ -41,6 +41,7 @@ pool.query(`
       ALTER TABLE products ALTER COLUMN moq TYPE VARCHAR(100) USING moq::text;
     END IF;
   END $$;
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 `).catch(err => {
   console.warn('[DB Schema Migration Notice]:', err.message);
 });

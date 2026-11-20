@@ -182,10 +182,6 @@ export const cleanupTestData = async (req, res) => {
       await pool.query('DELETE FROM customers WHERE id = ANY($1)', [verifiedIds]);
     }
 
-    await pool.query(
-      "DELETE FROM messages WHERE content LIKE '%[Live Hardening Verification]%' OR content LIKE '%ping probe%'"
-    );
-
     console.log(`[Admin Action] Test data cleanup completed. Confirmed and deleted ${deletedCount} test customer(s).`);
     res.json({
       success: true,

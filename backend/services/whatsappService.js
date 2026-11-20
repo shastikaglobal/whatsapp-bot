@@ -62,7 +62,7 @@ export const sendWhatsAppMessage = async (to, text, phoneNumberId = null, access
           accessToken = rows[0].access_token;
         }
       }
-      
+
       if (!phoneNumberId || !accessToken) {
         const { rows } = await pool.query(
           `SELECT phone_number_id, access_token FROM whatsapp_connections 
@@ -102,16 +102,16 @@ export const sendWhatsAppMessage = async (to, text, phoneNumberId = null, access
       recipient_type: 'individual',
       to: cleanTo,
       type: 'text',
-      text: { 
+      text: {
         preview_url: false,
-        body: text 
+        body: text
       }
     };
 
     const response = await axios.post(
       getBaseUrl(phoneNumberId),
       payload,
-      { 
+      {
         headers: getHeaders(accessToken),
         timeout: 15000
       }
@@ -124,14 +124,14 @@ export const sendWhatsAppMessage = async (to, text, phoneNumberId = null, access
     };
   } catch (error) {
     const metaError = error.response?.data?.error;
-    const errorCode = metaError?.code;
-    const errorMsg = metaError?.message || error.message;
+    const errorCode = metaError?.code || error.code || null;
+    const errorMsg = metaError?.message || error.message || 'Unknown error occurred';
 
     // Log safely without exposing access tokens
     console.error(`[WhatsApp API Error] Code ${errorCode || 'N/A'}: ${errorMsg}`);
 
     // Item 8: Token Error 190 Admin Alert - Flag connection as Token Expired (throttled to 1/hour)
-    if (errorCode === 190 || String(errorMsg).includes('Error validating access token') || String(errorMsg).includes('Session has expired')) {
+    if (errorCode === 190 || (typeof errorMsg === 'string' && (errorMsg.includes('Error validating access token') || errorMsg.includes('Session has expired')))) {
       await recordTokenAlert190(phoneNumberId, errorMsg);
     }
 
@@ -220,7 +220,7 @@ export const sendWhatsAppTemplate = async (
     const response = await axios.post(
       getBaseUrl(phoneNumberId),
       payload,
-      { 
+      {
         headers: getHeaders(accessToken),
         timeout: 15000
       }
@@ -233,12 +233,12 @@ export const sendWhatsAppTemplate = async (
     };
   } catch (error) {
     const metaError = error.response?.data?.error;
-    const errorCode = metaError?.code;
-    const errorMsg = metaError?.message || error.message;
+    const errorCode = metaError?.code || error.code || null;
+    const errorMsg = metaError?.message || error.message || 'Unknown error occurred';
 
     console.error(`[WhatsApp API Template Error] Code ${errorCode || 'N/A'}: ${errorMsg}`);
 
-    if (errorCode === 190 || String(errorMsg).includes('Error validating access token') || String(errorMsg).includes('Session has expired')) {
+    if (errorCode === 190 || (typeof errorMsg === 'string' && (errorMsg.includes('Error validating access token') || errorMsg.includes('Session has expired')))) {
       await recordTokenAlert190(phoneNumberId, errorMsg);
     }
 

@@ -1,6 +1,7 @@
 import pool from '../config/db.js';
 import axios from 'axios';
 import crypto from 'crypto';
+import { resetTokenAlertThrottle } from '../services/whatsappService.js';
 
 const GRAPH_API_VERSION = 'v21.0';
 
@@ -101,9 +102,10 @@ export const updateConfig = async (req, res) => {
       return res.status(404).json({ error: 'Connection not found.' });
     }
 
-    // If new token was saved, clear any active Error 190 alert
+    // If new token was saved, clear any active Error 190 alert and reset alert throttle
     if (tokenUpdated) {
       await pool.query("DELETE FROM bot_settings WHERE setting_key = 'meta_token_alert_190'");
+      resetTokenAlertThrottle();
     }
 
     res.json({ message: 'WhatsApp connection updated successfully.' });
@@ -220,6 +222,7 @@ export const testConnection = async (req, res) => {
 
       if (isVerified) {
         await pool.query("DELETE FROM bot_settings WHERE setting_key = 'meta_token_alert_190'");
+        resetTokenAlertThrottle();
         return res.json({
           success: true,
           message: 'Connection verified with Meta Cloud API. Number is live.',

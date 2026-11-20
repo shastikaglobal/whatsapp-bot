@@ -58,12 +58,21 @@ export default function Inbox() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Template Send State (Item 11)
+  // Template Send State (Item 11 & Item 3)
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [approvedTemplates, setApprovedTemplates] = useState<{ name: string, language: string, category: string, description?: string, components?: any[] }[]>([]);
   const [templateError, setTemplateError] = useState<string>('');
   const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
   const [isSendingTemplate, setIsSendingTemplate] = useState(false);
+
+  // Compute variables and preview for the selected template
+  const currentSelectedTemplate = approvedTemplates.find(t => t.name === selectedTemplateName);
+  const templateBodyComponent = currentSelectedTemplate?.components?.find((c: any) => String(c.type || '').toUpperCase() === 'BODY');
+  const templateBodyText = templateBodyComponent?.text || '';
+  const templateVarMatches = Array.from(templateBodyText.matchAll(/\{\{(\d+)\}\}/g));
+  const templateVarKeys = Array.from(new Set(templateVarMatches.map((m: any) => String(m[1])))).sort((a: string, b: string) => Number(a) - Number(b));
+  const areAllTemplateVarsFilled = templateVarKeys.every(k => (templateVariables[k] || '').trim().length > 0);
 
   useEffect(() => {
     api.get('/whatsapp/templates')
@@ -85,17 +94,34 @@ export default function Inbox() {
 
   const handleSendTemplate = async () => {
     if (!selectedConvo || !selectedTemplateName) return;
+    if (!areAllTemplateVarsFilled) {
+      showToast('Please fill in all template variables before sending.', 'error');
+      return;
+    }
     setIsSendingTemplate(true);
     try {
       const targetTemplate = approvedTemplates.find(t => t.name === selectedTemplateName) || { name: selectedTemplateName, language: 'en_US' };
+      
+      const components = templateVarKeys.length > 0 ? [
+        {
+          type: 'body',
+          parameters: templateVarKeys.map(k => ({
+            type: 'text',
+            text: (templateVariables[k] || '').trim()
+          }))
+        }
+      ] : [];
+
       const res = await api.post('/whatsapp/send-template', {
         customerId: selectedConvo.customer_id,
         conversationId: selectedConvo.id,
         templateName: targetTemplate.name,
-        languageCode: targetTemplate.language || 'en_US'
+        languageCode: targetTemplate.language, // Item 3: send template's own language code
+        components
       });
       showToast(res.data?.message || 'Template message sent successfully!', 'success');
       setIsTemplateModalOpen(false);
+      setTemplateVariables({});
       fetchMessages(selectedConvo.customer_id);
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Failed to send template message', 'error');
@@ -816,28 +842,77 @@ export default function Inbox() {
                     </label>
                     <select
                       value={selectedTemplateName}
-                      onChange={e => setSelectedTemplateName(e.target.value)}
+                      onChange={e => {
+                        setSelectedTemplateName(e.target.value);
+                        setTemplateVariables({});
+                      }}
                       className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500"
                     >
                       {approvedTemplates.map(t => (
-                        <option key={t.name} value={t.name}>
+                        <option key={`${t.name}_${t.language}`} value={t.name}>
                           {t.name} ({t.language}) - {t.category || 'General'}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {(() => {
-                    const currentT = approvedTemplates.find(t => t.name === selectedTemplateName);
-                    return (
-                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
-                        <div className="font-semibold text-slate-700">Template Information:</div>
-                        <div>Name: <span className="font-mono text-slate-900 font-medium">{currentT?.name || selectedTemplateName}</span></div>
-                        <div>Language: <span className="font-mono text-slate-900 font-medium">{currentT?.language || 'en_US'}</span></div>
-                        <div>Category: <span>{currentT?.category || 'Pre-approved re-engagement template'}</span></div>
+                  {/* Template Meta */}
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
+                    <div className="font-semibold text-slate-700">Template Details:</div>
+                    <div>Name: <span className="font-mono text-slate-900 font-medium">{currentSelectedTemplate?.name || selectedTemplateName}</span></div>
+                    <div>Language: <span className="font-mono text-slate-900 font-semibold text-emerald-700">{currentSelectedTemplate?.language || 'en_US'}</span></div>
+                    <div>Category: <span>{currentSelectedTemplate?.category || 'General'}</span></div>
+                  </div>
+
+                  {/* Variable Inputs (Item 3) */}
+                  {templateVarKeys.length > 0 && (
+                    <div className="space-y-3 pt-2 border-t border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                          Template Variables ({templateVarKeys.length})
+                        </label>
+                        <span className={`text-[11px] font-medium ${areAllTemplateVarsFilled ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {areAllTemplateVarsFilled ? '✓ All variables provided' : '• Required to send'}
+                        </span>
                       </div>
-                    );
-                  })()}
+                      <div className="space-y-2.5">
+                        {templateVarKeys.map(k => (
+                          <div key={k}>
+                            <label className="block text-xs text-slate-600 font-medium mb-1">
+                              Variable <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-emerald-700 font-bold">{`{{${k}}}`}</code>:
+                            </label>
+                            <input
+                              type="text"
+                              value={templateVariables[k] || ''}
+                              onChange={e => setTemplateVariables({ ...templateVariables, [k]: e.target.value })}
+                              placeholder={`Enter value for {{${k}}} (e.g. customer name, date, product)...`}
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Template Body Preview (Item 3) */}
+                  {templateBodyText && (
+                    <div className="p-3 bg-emerald-50/50 border border-emerald-200/80 rounded-lg text-xs space-y-1.5">
+                      <div className="font-semibold text-emerald-950 flex items-center justify-between">
+                        <span>Message Preview:</span>
+                        <span className="text-[10px] text-emerald-700 font-mono">Meta Format</span>
+                      </div>
+                      <div className="text-slate-800 font-sans whitespace-pre-wrap leading-relaxed bg-white/90 p-2.5 rounded border border-emerald-100 shadow-sm text-xs">
+                        {(() => {
+                          let preview = templateBodyText;
+                          templateVarKeys.forEach(k => {
+                            const val = templateVariables[k]?.trim();
+                            preview = preview.replaceAll(`{{${k}}}`, val ? `[${val}]` : `{{${k}}}`);
+                          });
+                          return preview;
+                        })()}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : !templateError ? (
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 text-center">
@@ -857,8 +932,8 @@ export default function Inbox() {
               <button
                 type="button"
                 onClick={handleSendTemplate}
-                disabled={isSendingTemplate}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
+                disabled={isSendingTemplate || (templateVarKeys.length > 0 && !areAllTemplateVarsFilled)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
               >
                 <Send className="w-4 h-4" /> {isSendingTemplate ? 'Sending...' : 'Send Template'}
               </button>

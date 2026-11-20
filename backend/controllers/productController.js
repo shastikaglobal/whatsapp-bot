@@ -136,6 +136,18 @@ const getProductsIdType = async () => {
   }
 };
 
+// Helper: inspect whether products has an updated_at column
+export const checkProductsUpdatedAt = async () => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'updated_at'"
+    );
+    return rows.length > 0;
+  } catch (_) {
+    return false;
+  }
+};
+
 export const previewImportCSV = async (req, res) => {
   try {
     const { csvText } = req.body || {};
@@ -311,6 +323,8 @@ export const importProductsCSV = async (req, res) => {
 
     const idType = await getProductsIdType();
     const isIntegerId = idType.includes('int');
+    const hasUpdatedAt = await checkProductsUpdatedAt();
+    const updateClause = hasUpdatedAt ? ', updated_at = CURRENT_TIMESTAMP' : '';
 
     let savedCount = 0;
     for (const p of rowsToSave) {
@@ -328,8 +342,7 @@ export const importProductsCSV = async (req, res) => {
                price = EXCLUDED.price,
                moq = EXCLUDED.moq,
                availability = EXCLUDED.availability,
-               shippinginfo = EXCLUDED.shippinginfo,
-               updated_at = CURRENT_TIMESTAMP`,
+               shippinginfo = EXCLUDED.shippinginfo${updateClause}`,
             [intId, p.name, p.category, p.description, p.price, p.moq, p.availability, p.shippinginfo]
           );
         } else {
@@ -353,8 +366,7 @@ export const importProductsCSV = async (req, res) => {
              price = EXCLUDED.price,
              moq = EXCLUDED.moq,
              availability = EXCLUDED.availability,
-             shippinginfo = EXCLUDED.shippinginfo,
-             updated_at = CURRENT_TIMESTAMP`,
+             shippinginfo = EXCLUDED.shippinginfo${updateClause}`,
           [strId, p.name, p.category, p.description, p.price, p.moq, p.availability, p.shippinginfo]
         );
       }
